@@ -4,6 +4,7 @@ No BIRD configuration, state files, or routes are modified.
 """
 import argparse
 import fcntl
+import hashlib
 import json
 from pathlib import Path
 
@@ -51,7 +52,16 @@ def main():
         state = args.state_dir
         current_text = (state / "current.txt").read_text(encoding="utf-8")
         candidate_text = (state / "candidate.txt").read_text(encoding="utf-8")
+        manifest = json.loads((state / "candidate.json").read_text(encoding="utf-8"))
         rendered_text = candidate_prefix_text(state / "candidate.bird.conf")
+        if manifest.get("status") != "candidate_not_applied":
+            raise ValueError("unexpected candidate manifest status")
+        if manifest.get("candidate_sha256") != hashlib.sha256(candidate_text.encode("utf-8")).hexdigest():
+            raise ValueError("candidate manifest text digest mismatch; re-fetch required")
+        if manifest.get("bird_sha256") != hashlib.sha256((state / "candidate.bird.conf").read_bytes()).hexdigest():
+            raise ValueError("candidate manifest BIRD digest mismatch; re-fetch required")
+        if manifest.get("prefix_count") != len(parse_prefixes(candidate_text)):
+            raise ValueError("candidate manifest prefix count mismatch")
         if candidate_text != rendered_text:
             raise ValueError("candidate.txt and candidate.bird.conf differ")
         live, exported = read_bird_state()
