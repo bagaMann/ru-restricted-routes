@@ -115,68 +115,73 @@ def main():
     p.add_argument("--confirm", action="store_true", help="required to modify running BIRD")
     p.add_argument("--promote-current", action="store_true", help="update current.txt only after verified apply")
     args = p.parse_args()
-    count = validate_candidate(args.candidate)
-    if not args.target.is_file() or not args.bird_config.is_file():
-        p.error("existing target and BIRD config are required")
-    if args.promote_current:
-        expected_text = candidate_prefix_text(args.candidate)
-        approved_candidate = args.candidate.parent / "candidate.txt"
-        if not approved_candidate.is_file() or approved_candidate.read_text(encoding="utf-8") != expected_text:
-            raise ValueError("candidate.txt does not match candidate BIRD fragment")
-
-    if not args.confirm:
-        print(f"DRY RUN: valid candidate with {count} prefixes; use --confirm to apply")
-        return
     args.lock.parent.mkdir(parents=True, exist_ok=True)
     with args.lock.open("a+") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        old = args.target.read_bytes()
-        new = args.candidate.read_bytes()
-        if old == new:
-            wait_for_routes(count)
-            if args.promote_current:
-                atomic_bytes(args.candidate.parent / "current.txt", expected_text.encode())
-            print("No changes; BIRD state verified")
+        apply_locked(args)
+
+
+def apply_locked(args):
+        count = validate_candidate(args.candidate)
+        if not args.target.is_file() or not args.bird_config.is_file():
+            p.error("existing target and BIRD config are required")
+        if args.promote_current:
+            expected_text = candidate_prefix_text(args.candidate)
+            approved_candidate = args.candidate.parent / "candidate.txt"
+            if not approved_candidate.is_file() or approved_candidate.read_text(encoding="utf-8") != expected_text:
+                raise ValueError("candidate.txt does not match candidate BIRD fragment")
+
+        if not args.confirm:
+            print(f"DRY RUN: valid candidate with {count} prefixes; use --confirm to apply")
             return
-        # Check the proposed config BEFORE changing the live include.
-        # A copy of the main config is only safe if its include points at the
-        # target; substitute that exact quoted path in a temporary copy.
-        main_text = args.bird_config.read_text(encoding="utf-8")
-        quoted = '"' + str(args.target) + '"'
-        if main_text.count(quoted) != 1:
-            raise ValueError("main config must reference target exactly once")
-        with tempfile.TemporaryDirectory(dir=args.target.parent) as staging:
-            staged = Path(staging) / "routes.conf"
-            staged.write_bytes(new)
-            os.chmod(staged, 0o644)
-            # Place a temporary main config beside the real one so any relative
-            # includes retain the same base directory.
-            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8",
-                                             dir=args.bird_config.parent,
-                                             prefix=".ru-bird-check-", suffix=".conf") as cfg:
-                cfg.write(main_text.replace(quoted, '"' + str(staged) + '"'))
-                cfg.flush()
-                os.chmod(cfg.name, 0o644)
-                run("bird", "-p", "-c", cfg.name)
-        args.backup.parent.mkdir(parents=True, exist_ok=True)
-        atomic_bytes(args.backup, old)
-        atomic_bytes(args.target, new)
-        try:
-            run("bird", "-p", "-c", str(args.bird_config))
-            run("birdc", "configure")
-            wait_for_routes(count)
-        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired, RuntimeError):
-            atomic_bytes(args.target, old)
-            try:
-                run("birdc", "configure")
-                previous_count = validate_candidate(args.backup)
-                wait_for_routes(previous_count)
-            except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired, RuntimeError, ValueError) as rollback_error:
-                raise RuntimeError(f"Apply failed and rollback could not be verified: {rollback_error}")
-            raise
+
+    old = args.target.read_bytes()
+    new = args.candidate.read_bytes()
+    if old == new:
+        wait_for_routes(count)
         if args.promote_current:
             atomic_bytes(args.candidate.parent / "current.txt", expected_text.encode())
-        print(f"Applied {count} prefixes; rollback copy: {args.backup}")
+        print("No changes; BIRD state verified")
+        return
+    # Check the proposed config BEFORE changing the live include.
+    # A copy of the main config is only safe if its include points at the
+    # target; substitute that exact quoted path in a temporary copy.
+    main_text = args.bird_config.read_text(encoding="utf-8")
+    quoted = '"' + str(args.target) + '"'
+    if main_text.count(quoted) != 1:
+        raise ValueError("main config must reference target exactly once")
+    with tempfile.TemporaryDirectory(dir=args.target.parent) as staging:
+        staged = Path(staging) / "routes.conf"
+        staged.write_bytes(new)
+        os.chmod(staged, 0o644)
+        # Place a temporary main config beside the real one so any relative
+        # includes retain the same base directory.
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8",
+                                         dir=args.bird_config.parent,
+                                         prefix=".ru-bird-check-", suffix=".conf") as cfg:
+            cfg.write(main_text.replace(quoted, '"' + str(staged) + '"'))
+            cfg.flush()
+            os.chmod(cfg.name, 0o644)
+            run("bird", "-p", "-c", cfg.name)
+    args.backup.parent.mkdir(parents=True, exist_ok=True)
+    atomic_bytes(args.backup, old)
+    atomic_bytes(args.target, new)
+    try:
+        run("bird", "-p", "-c", str(args.bird_config))
+        run("birdc", "configure")
+        wait_for_routes(count)
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired, RuntimeError):
+        atomic_bytes(args.target, old)
+        try:
+            run("birdc", "configure")
+            previous_count = validate_candidate(args.backup)
+            wait_for_routes(previous_count)
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired, RuntimeError, ValueError) as rollback_error:
+            raise RuntimeError(f"Apply failed and rollback could not be verified: {rollback_error}")
+        raise
+    if args.promote_current:
+        atomic_bytes(args.candidate.parent / "current.txt", expected_text.encode())
+    print(f"Applied {count} prefixes; rollback copy: {args.backup}")
 
 
 if __name__ == "__main__":
