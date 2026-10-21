@@ -42,7 +42,7 @@ class ApplyGateTests(unittest.TestCase):
         with TemporaryDirectory() as folder:
             state = Path(folder)
             old = "8.8.8.0/24\n1.1.1.0/24\n"
-            new = old + "9.9.9.0/24\n"
+            new = "1.1.1.0/24\n8.8.8.0/24\n9.9.9.0/24\n"
             bird = render_bird(parse_prefixes(new))
             (state / "candidate.bird.conf").write_text(bird)
             (state / "candidate.txt").write_text(new)
