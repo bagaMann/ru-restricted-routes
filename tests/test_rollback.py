@@ -14,7 +14,7 @@ from ru_routes.generate import parse_prefixes, render_bird
 
 def fixture(root):
     state = Path(root)
-    baseline = "1.1.1.0/24\n4.4.4.0/24\n8.8.8.0/24\n8.8.4.0/24\n9.9.9.0/24\n"
+    baseline = "1.1.1.0/24\n4.4.4.0/24\n8.8.4.0/24\n8.8.8.0/24\n9.9.9.0/24\n"
     proposed = baseline + "11.11.11.0/24\n"
     original = render_bird(parse_prefixes(baseline))
     updated = render_bird(parse_prefixes(proposed))
