@@ -59,6 +59,23 @@ def candidate_prefix_text(candidate):
     return "".join(f"{network}\n" for network in networks)
 
 
+def parse_bird_state(table, protocol):
+    """Parse BIRD 2 route and protocol reports with explicit diagnostics."""
+    route_match = re.search(r"(\d+) of (\d+) routes for (\d+) networks", table)
+    exported_match = re.search(r"Routes:\s+\d+ imported,\s+(\d+) exported", protocol)
+    established = re.search(r"BGP state:\s+Established\b", protocol)
+    missing = []
+    if not route_match:
+        missing.append("table route count")
+    if not exported_match:
+        missing.append("BGP exported route count")
+    if not established:
+        missing.append("BGP Established state")
+    if missing:
+        raise RuntimeError("Cannot parse BIRD status: " + ", ".join(missing))
+    return int(route_match.group(1)), int(exported_match.group(1))
+
+
 def read_bird_state():
     """Read actual table count and exported BGP routes; fail closed on parse errors."""
     table = subprocess.run(
@@ -69,11 +86,7 @@ def read_bird_state():
         ["birdc", "show", "protocols", "all", "ru_to_mikrotik"],
         check=True, capture_output=True, text=True, timeout=15,
     ).stdout
-    route_match = re.search(r"(\\d+) of (\\d+) routes for (\\d+) networks", table)
-    exported_match = re.search(r"Routes:\\s+\\d+ imported,\\s+(\\d+) exported", protocol)
-    if not route_match or not exported_match or not re.search(r"BGP state:\\s+Established", protocol):
-        raise RuntimeError("BIRD table, export count or BGP Established state unavailable")
-    return int(route_match.group(1)), int(exported_match.group(1))
+    return parse_bird_state(table, protocol)
 
 
 def wait_for_routes(expected, timeout=30):
