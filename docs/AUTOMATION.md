@@ -49,3 +49,25 @@ meaningful protection. The candidate-only timer remains safe from automatic
 routing changes regardless.
 
 **Do not** configure a timer to run `apply.py --confirm` yet.
+
+## Verified manual promotion (new)
+
+The apply command now waits for both the actual BIRD table count and the
+BGP export count to equal the candidate prefix count, while BGP remains
+Established. If validation fails within 30 seconds, it restores the previous
+route fragment, reconfigures BIRD and verifies rollback. If rollback itself
+cannot be verified, the command fails loudly and needs operator intervention.
+
+After reviewing candidate.txt and candidate.json, apply and promote the
+approved baseline together:
+
+```bash
+python3 -m ru_routes.apply --candidate /var/lib/ru-restricted-routes/candidate.bird.conf --confirm --promote-current
+```
+
+The candidate.txt must match the generated BIRD fragment exactly. current.txt
+is updated only after the BIRD state has been verified, including the no-change
+case. This validates the BIRD side, not installation or forwarding on MikroTik.
+
+**Automatic application is still disabled.** The daily systemd timer remains
+fetch-only. Do not add --confirm to the existing fetch service.
