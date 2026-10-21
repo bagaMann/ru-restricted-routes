@@ -152,6 +152,8 @@ def apply_locked(args):
     new = args.candidate.read_bytes()
     if old == new:
         wait_for_routes(count)
+        from ru_routes.verify_routes import read_and_verify
+        read_and_verify(expected_text)
         if args.promote_current:
             atomic_bytes(args.candidate.parent / "current.txt", expected_text.encode())
         print("No changes; BIRD state verified")
@@ -185,12 +187,16 @@ def apply_locked(args):
         run("bird", "-p", "-c", str(args.bird_config))
         run("birdc", "configure")
         wait_for_routes(count)
+        from ru_routes.verify_routes import read_and_verify
+        read_and_verify(expected_text)
     except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired, RuntimeError):
         atomic_bytes(args.target, old)
         try:
             run("birdc", "configure")
             previous_count = validate_candidate(args.backup)
             wait_for_routes(previous_count)
+            from ru_routes.verify_routes import read_and_verify
+            read_and_verify(baseline)
             transaction.clear(journal)
         except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired, RuntimeError, ValueError) as rollback_error:
             raise RuntimeError(f"Apply failed and rollback could not be verified: {rollback_error}")
