@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 
 from ru_routes.generate import parse_prefixes, render_bird
+from ru_routes import transaction
 
 
 def run(*argv):
@@ -131,6 +132,8 @@ def apply_locked(args):
     rendered_text = validate_publication(state, candidate_text)
     if rendered_text != candidate_text:
         raise ValueError("candidate files differ")
+    journal = args.backup.parent / "transaction.json"
+    transaction.require_clean(journal)
     count = validate_candidate(args.candidate)
     if not args.target.is_file() or not args.bird_config.is_file():
         raise ValueError("existing target and BIRD config are required")
@@ -174,7 +177,9 @@ def apply_locked(args):
             os.chmod(cfg.name, 0o644)
             run("bird", "-p", "-c", cfg.name)
     args.backup.parent.mkdir(parents=True, exist_ok=True)
-    atomic_bytes(args.backup, old)
+    transaction.durable_write(args.backup, old)
+    transaction.record(journal, "prepared", args.target, old, new, args.backup)
+    transaction.record(journal, "applying", args.target, old, new, args.backup)
     atomic_bytes(args.target, new)
     try:
         run("bird", "-p", "-c", str(args.bird_config))
@@ -186,11 +191,14 @@ def apply_locked(args):
             run("birdc", "configure")
             previous_count = validate_candidate(args.backup)
             wait_for_routes(previous_count)
+            transaction.clear(journal)
         except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired, RuntimeError, ValueError) as rollback_error:
             raise RuntimeError(f"Apply failed and rollback could not be verified: {rollback_error}")
         raise
+    transaction.record(journal, "verified", args.target, old, new, args.backup)
     if args.promote_current:
         atomic_bytes(args.candidate.parent / "current.txt", expected_text.encode())
+    transaction.clear(journal)
     print(f"Applied {count} prefixes; rollback copy: {args.backup}")
 
 
