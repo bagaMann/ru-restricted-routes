@@ -29,6 +29,11 @@ def atomic_bytes(target, data):
             os.fsync(stream.fileno())
         os.chmod(name, 0o644)
         os.replace(name, target)
+        directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
     finally:
         if os.path.exists(name):
             os.unlink(name)
