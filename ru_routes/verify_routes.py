@@ -35,8 +35,10 @@ def parse_listing(output, *, table="ru_restricted_table", source="ru_restricted_
         if network in found:
             raise ValueError("duplicate route: " + prefix)
         found.add(network)
-    if not seen_header or not found:
-        raise ValueError("empty or missing BIRD route listing")
+    if not seen_header:
+        raise ValueError("missing expected table header")
+    if not found:
+        raise ValueError("empty BIRD route listing")
     return found
 
 
