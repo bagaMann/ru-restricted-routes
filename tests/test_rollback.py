@@ -37,6 +37,7 @@ def fixture(root):
     return args, original, baseline
 
 
+@patch("ru_routes.verify_routes.read_and_verify", return_value=5)
 class RollbackTests(unittest.TestCase):
     def test_configure_failure_restores_original(self):
         with TemporaryDirectory() as folder:
