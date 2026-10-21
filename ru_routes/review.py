@@ -3,6 +3,7 @@
 No BIRD configuration, state files, or routes are modified.
 """
 import argparse
+import fcntl
 import json
 from pathlib import Path
 
@@ -44,19 +45,22 @@ def main():
     args = parser.parse_args()
     if not 0 <= args.max_changed_fraction <= 1 or not 0 <= args.max_removed_fraction <= 1:
         parser.error("fraction limits must be between 0 and 1")
-    state = args.state_dir
-    current_text = (state / "current.txt").read_text(encoding="utf-8")
-    candidate_text = (state / "candidate.txt").read_text(encoding="utf-8")
-    rendered_text = candidate_prefix_text(state / "candidate.bird.conf")
-    if candidate_text != rendered_text:
-        raise ValueError("candidate.txt and candidate.bird.conf differ")
-    live, exported = read_bird_state()
-    result = review(current_text, candidate_text, live, exported,
-                    args.max_changed_fraction, args.max_removed_fraction)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
-    if not result["approved"]:
-        raise SystemExit(2)
-
+    lock_path = Path("/run/lock/ru-restricted-routes.lock")
+    with lock_path.open("a+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_SH)
+        state = args.state_dir
+        current_text = (state / "current.txt").read_text(encoding="utf-8")
+        candidate_text = (state / "candidate.txt").read_text(encoding="utf-8")
+        rendered_text = candidate_prefix_text(state / "candidate.bird.conf")
+        if candidate_text != rendered_text:
+            raise ValueError("candidate.txt and candidate.bird.conf differ")
+        live, exported = read_bird_state()
+        result = review(current_text, candidate_text, live, exported,
+                        args.max_changed_fraction, args.max_removed_fraction)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        if not result["approved"]:
+            raise SystemExit(2)
+    
 
 if __name__ == "__main__":
     main()
