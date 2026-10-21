@@ -12,5 +12,5 @@ UMask=0022
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=/var/lib/ru-restricted-routes
+ReadWritePaths=/var/lib/ru-restricted-routes /run/lock
 ProtectHome=true
