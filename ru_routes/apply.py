@@ -122,14 +122,24 @@ def main():
 
 
 def apply_locked(args):
+    # Local import avoids a module-level cycle: review imports BIRD readers here.
+    from ru_routes.review import validate_publication, review
+    state = args.candidate.parent
+    if args.candidate.resolve() != (state / "candidate.bird.conf").resolve():
+        raise ValueError("only a published candidate.bird.conf may be applied")
+    candidate_text = (state / "candidate.txt").read_text(encoding="utf-8")
+    rendered_text = validate_publication(state, candidate_text)
+    if rendered_text != candidate_text:
+        raise ValueError("candidate files differ")
     count = validate_candidate(args.candidate)
     if not args.target.is_file() or not args.bird_config.is_file():
-        p.error("existing target and BIRD config are required")
-    if args.promote_current:
-        expected_text = candidate_prefix_text(args.candidate)
-        approved_candidate = args.candidate.parent / "candidate.txt"
-        if not approved_candidate.is_file() or approved_candidate.read_text(encoding="utf-8") != expected_text:
-            raise ValueError("candidate.txt does not match candidate BIRD fragment")
+        raise ValueError("existing target and BIRD config are required")
+    baseline = (state / "current.txt").read_text(encoding="utf-8")
+    live, exported = read_bird_state()
+    decision = review(baseline, candidate_text, live, exported)
+    if not decision["approved"]:
+        raise ValueError("candidate review rejected: " + "; ".join(decision["reasons"]))
+    expected_text = candidate_text
 
     if not args.confirm:
         print(f"DRY RUN: valid candidate with {count} prefixes; use --confirm to apply")
