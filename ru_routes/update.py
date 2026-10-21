@@ -3,6 +3,7 @@
 This tool does not reload BIRD, modify BGP peers, or install routing rules.
 """
 import argparse
+import fcntl
 import hashlib
 import ipaddress
 import json
@@ -61,6 +62,15 @@ def main():
     prefixes = parse_prefixes(raw)
     if not args.min_prefixes <= len(prefixes) <= args.max_prefixes:
         raise ValueError(f"prefix count outside limits: {len(prefixes)}")
+    lock_path = Path("/run/lock/ru-restricted-routes.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        publish_candidate(args, prefixes, payload)
+
+
+def publish_candidate(args, prefixes, payload):
+    """Publish all candidate files under the shared advisory lock."""
     current = args.state_dir / "current.txt"
     old = parse_prefixes(current.read_text(encoding="utf-8")) if current.exists() else []
     if not args.approve_large_change:
