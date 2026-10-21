@@ -122,18 +122,18 @@ def main():
 
 
 def apply_locked(args):
-        count = validate_candidate(args.candidate)
-        if not args.target.is_file() or not args.bird_config.is_file():
-            p.error("existing target and BIRD config are required")
-        if args.promote_current:
-            expected_text = candidate_prefix_text(args.candidate)
-            approved_candidate = args.candidate.parent / "candidate.txt"
-            if not approved_candidate.is_file() or approved_candidate.read_text(encoding="utf-8") != expected_text:
-                raise ValueError("candidate.txt does not match candidate BIRD fragment")
+    count = validate_candidate(args.candidate)
+    if not args.target.is_file() or not args.bird_config.is_file():
+        p.error("existing target and BIRD config are required")
+    if args.promote_current:
+        expected_text = candidate_prefix_text(args.candidate)
+        approved_candidate = args.candidate.parent / "candidate.txt"
+        if not approved_candidate.is_file() or approved_candidate.read_text(encoding="utf-8") != expected_text:
+            raise ValueError("candidate.txt does not match candidate BIRD fragment")
 
-        if not args.confirm:
-            print(f"DRY RUN: valid candidate with {count} prefixes; use --confirm to apply")
-            return
+    if not args.confirm:
+        print(f"DRY RUN: valid candidate with {count} prefixes; use --confirm to apply")
+        return
 
     old = args.target.read_bytes()
     new = args.candidate.read_bytes()
