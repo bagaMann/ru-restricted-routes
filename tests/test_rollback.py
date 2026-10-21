@@ -14,8 +14,8 @@ from ru_routes.generate import parse_prefixes, render_bird
 
 def fixture(root):
     state = Path(root)
-    baseline = "1.1.1.0/24\n8.8.8.0/24\n"
-    proposed = baseline + "9.9.9.0/24\n"
+    baseline = "1.1.1.0/24\n4.4.4.0/24\n8.8.8.0/24\n8.8.4.0/24\n9.9.9.0/24\n"
+    proposed = baseline + "11.11.11.0/24\n"
     original = render_bird(parse_prefixes(baseline))
     updated = render_bird(parse_prefixes(proposed))
     candidate = state / "candidate.bird.conf"
@@ -23,7 +23,7 @@ def fixture(root):
     (state / "candidate.txt").write_text(proposed)
     (state / "current.txt").write_text(baseline)
     (state / "candidate.json").write_text(json.dumps({
-        "status": "candidate_not_applied", "prefix_count": 3,
+        "status": "candidate_not_applied", "prefix_count": 6,
         "candidate_sha256": hashlib.sha256(proposed.encode()).hexdigest(),
         "bird_sha256": hashlib.sha256(updated.encode()).hexdigest(),
     }))
@@ -46,7 +46,7 @@ class RollbackTests(unittest.TestCase):
                 calls.append(argv)
                 if argv == ("birdc", "configure") and calls.count(argv) == 1:
                     raise subprocess.CalledProcessError(1, argv)
-            with patch("ru_routes.apply.read_bird_state", return_value=(2, 2)):
+            with patch("ru_routes.apply.read_bird_state", return_value=(5, 5)):
                 with patch("ru_routes.apply.run", side_effect=command):
                     with self.assertRaises(subprocess.CalledProcessError):
                         apply_locked(args)
@@ -63,7 +63,7 @@ class RollbackTests(unittest.TestCase):
                     with patch("ru_routes.apply.wait_for_routes", side_effect=[RuntimeError("export mismatch"), None]) as wait:
                         with self.assertRaisesRegex(RuntimeError, "export mismatch"):
                             apply_locked(args)
-            self.assertEqual([call.args[0] for call in wait.call_args_list], [3, 2])
+            self.assertEqual([call.args[0] for call in wait.call_args_list], [6, 5])
             self.assertEqual(args.target.read_text(), original)
             self.assertEqual((Path(folder) / "current.txt").read_text(), baseline)
 
