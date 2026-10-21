@@ -1,0 +1,16 @@
+[Unit]
+Description=Fetch and validate candidate RU restricted IPv4 routes
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/ru-restricted-routes
+ExecStart=/usr/bin/python3 -m ru_routes.update --state-dir /var/lib/ru-restricted-routes
+UMask=0022
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/ru-restricted-routes
+ProtectHome=true
