@@ -10,5 +10,6 @@ WorkingDirectory=/opt/ru-restricted-routes
 ExecStart=/usr/bin/python3 -m ru_routes.review --state-dir /var/lib/ru-restricted-routes
 NoNewPrivileges=true
 ProtectSystem=strict
+ReadWritePaths=/run/lock
 ProtectHome=true
 PrivateTmp=true
