@@ -3,7 +3,7 @@ from unittest.mock import patch
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from ru_routes.apply import atomic_bytes, validate_candidate, candidate_prefix_text, wait_for_routes
+from ru_routes.apply import atomic_bytes, validate_candidate, candidate_prefix_text, parse_bird_state, wait_for_routes
 from ru_routes.generate import parse_prefixes, render_bird
 
 
@@ -40,6 +40,23 @@ class ApplyTests(unittest.TestCase):
             expected = "".join(f"{network}\n" for network in networks)
             self.assertEqual(candidate_prefix_text(file), expected)
             self.assertEqual(len(candidate_prefix_text(file).splitlines()), 3)
+
+    def test_parse_real_bird_2175_output(self):
+        table = "BIRD 2.17.5 ready.\n613 of 613 routes for 613 networks in table ru_restricted_table\n"
+        protocol = (
+            "BIRD 2.17.5 ready.\n"
+            "ru_to_mikrotik BGP --- up Established\n"
+            "  BGP state:          Established\n"
+            "    Routes:         0 imported, 613 exported, 0 preferred\n"
+        )
+        self.assertEqual(parse_bird_state(table, protocol), (613, 613))
+
+    def test_parse_bird_missing_export_diagnostic(self):
+        with self.assertRaisesRegex(RuntimeError, "BGP exported route count"):
+            parse_bird_state(
+                "613 of 613 routes for 613 networks in table ru_restricted_table",
+                "BGP state: Established",
+            )
 
     def test_atomic_write(self):
         with TemporaryDirectory() as directory:
