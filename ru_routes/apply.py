@@ -47,6 +47,18 @@ def validate_candidate(candidate):
     return len(networks)
 
 
+def candidate_prefix_text(candidate):
+    """Return canonical newline-separated CIDRs from a validated fragment."""
+    validate_candidate(candidate)
+    lines = [
+        line.strip()[len("route "):-len(" blackhole;")]
+        for line in candidate.read_text(encoding="utf-8").splitlines()
+        if line.strip().startswith("route ") and line.strip().endswith(" blackhole;")
+    ]
+    networks = parse_prefixes("\n".join(lines))
+    return "".join(f"{network}\n" for network in networks)
+
+
 def read_bird_state():
     """Read actual table count and exported BGP routes; fail closed on parse errors."""
     table = subprocess.run(
@@ -94,14 +106,11 @@ def main():
     if not args.target.is_file() or not args.bird_config.is_file():
         p.error("existing target and BIRD config are required")
     if args.promote_current:
-        expected_text = "".join(f"{network}\\n" for network in parse_prefixes(
-            "\\n".join(line.strip()[len("route "):-len(" blackhole;")]
-                      for line in args.candidate.read_text(encoding="utf-8").splitlines()
-                      if line.strip().startswith("route ") and line.strip().endswith(" blackhole;"))
-        ))
+        expected_text = candidate_prefix_text(args.candidate)
         approved_candidate = args.candidate.parent / "candidate.txt"
         if not approved_candidate.is_file() or approved_candidate.read_text(encoding="utf-8") != expected_text:
             raise ValueError("candidate.txt does not match candidate BIRD fragment")
+
     if not args.confirm:
         print(f"DRY RUN: valid candidate with {count} prefixes; use --confirm to apply")
         return
