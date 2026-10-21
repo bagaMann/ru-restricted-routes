@@ -42,7 +42,7 @@ def restore_file(journal, confirm=False):
         transaction.durable_write(Path(entry["target"]), Path(entry["backup"]).read_bytes())
     data = dict(entry)
     data["state"] = "recovery_required"
-    transaction.durable_write(journal, (json.dumps(data, indent=2, sort_keys=True) + "\\n").encode())
+    transaction.durable_write(journal, (json.dumps(data, indent=2, sort_keys=True) + "\n").encode())
     return "Backup file restored; journal retained. Verify BIRD manually before clearing."
 
 
