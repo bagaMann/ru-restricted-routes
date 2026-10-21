@@ -29,7 +29,7 @@ class ReviewTests(unittest.TestCase):
         self.assertFalse(result["approved"])
 
     def test_small_change_allowed(self):
-        old = "".join(f"8.8.{i}.0/24\n" for i in range(20))
+        old = "".join(f"8.8.{i * 2}.0/24\n" for i in range(20))
         new = old + "9.9.9.0/24\n"
         result = review(old, new, 20, 20)
         self.assertTrue(result["approved"])
