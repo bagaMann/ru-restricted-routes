@@ -27,7 +27,7 @@ class PublicationTests(unittest.TestCase):
             self.assertEqual(validate_publication(state, text), text)
 
             # Simulate crash after replacing candidate.txt but before BIRD/manifest.
-            altered = "8.8.8.0/24\n1.1.1.0/24\n"
+            altered = "1.1.1.0/24\n8.8.8.0/24\n"
             (state / "candidate.txt").write_text(altered, encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "digest mismatch"):
                 validate_publication(state, altered)
