@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily RU restricted route candidate refresh
+
+[Timer]
+OnCalendar=*-*-* 04:15:00
+RandomizedDelaySec=20m
+Persistent=true
+Unit=ru-restricted-fetch.service
+
+[Install]
+WantedBy=timers.target
