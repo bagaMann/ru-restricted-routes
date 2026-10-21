@@ -6,7 +6,8 @@ import argparse
 import fcntl
 import os
 from pathlib import Path
-import shutil
+import re
+import time
 import subprocess
 import tempfile
 
@@ -46,6 +47,39 @@ def validate_candidate(candidate):
     return len(networks)
 
 
+def read_bird_state():
+    """Read actual table count and exported BGP routes; fail closed on parse errors."""
+    table = subprocess.run(
+        ["birdc", "show", "route", "table", "ru_restricted_table", "count"],
+        check=True, capture_output=True, text=True, timeout=15,
+    ).stdout
+    protocol = subprocess.run(
+        ["birdc", "show", "protocols", "all", "ru_to_mikrotik"],
+        check=True, capture_output=True, text=True, timeout=15,
+    ).stdout
+    route_match = re.search(r"(\\d+) of (\\d+) routes for (\\d+) networks", table)
+    exported_match = re.search(r"Routes:\\s+\\d+ imported,\\s+(\\d+) exported", protocol)
+    if not route_match or not exported_match or not re.search(r"BGP state:\\s+Established", protocol):
+        raise RuntimeError("BIRD table, export count or BGP Established state unavailable")
+    return int(route_match.group(1)), int(exported_match.group(1))
+
+
+def wait_for_routes(expected, timeout=30):
+    """Wait for both BIRD table and BGP export to converge."""
+    deadline = time.monotonic() + timeout
+    last = None
+    while True:
+        try:
+            last = read_bird_state()
+            if last == (expected, expected):
+                return
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired, RuntimeError) as exc:
+            last = str(exc)
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f"BIRD failed to converge to {expected} routes: {last}")
+        time.sleep(1)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--candidate", type=Path, required=True)
@@ -54,10 +88,20 @@ def main():
     p.add_argument("--backup", type=Path, default=Path("/var/lib/ru-restricted-routes/previous-routes.conf"))
     p.add_argument("--lock", type=Path, default=Path("/run/lock/ru-restricted-routes.lock"))
     p.add_argument("--confirm", action="store_true", help="required to modify running BIRD")
+    p.add_argument("--promote-current", action="store_true", help="update current.txt only after verified apply")
     args = p.parse_args()
     count = validate_candidate(args.candidate)
     if not args.target.is_file() or not args.bird_config.is_file():
         p.error("existing target and BIRD config are required")
+    if args.promote_current:
+        expected_text = "".join(f"{network}\\n" for network in parse_prefixes(
+            "\\n".join(line.strip()[len("route "):-len(" blackhole;")]
+                      for line in args.candidate.read_text(encoding="utf-8").splitlines()
+                      if line.strip().startswith("route ") and line.strip().endswith(" blackhole;"))
+        ))
+        approved_candidate = args.candidate.parent / "candidate.txt"
+        if not approved_candidate.is_file() or approved_candidate.read_text(encoding="utf-8") != expected_text:
+            raise ValueError("candidate.txt does not match candidate BIRD fragment")
     if not args.confirm:
         print(f"DRY RUN: valid candidate with {count} prefixes; use --confirm to apply")
         return
@@ -67,7 +111,10 @@ def main():
         old = args.target.read_bytes()
         new = args.candidate.read_bytes()
         if old == new:
-            print("No changes")
+            wait_for_routes(count)
+            if args.promote_current:
+                atomic_bytes(args.candidate.parent / "current.txt", expected_text.encode())
+            print("No changes; BIRD state verified")
             return
         # Check the proposed config BEFORE changing the live include.
         # A copy of the main config is only safe if its include points at the
@@ -95,13 +142,18 @@ def main():
         try:
             run("bird", "-p", "-c", str(args.bird_config))
             run("birdc", "configure")
-        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            wait_for_routes(count)
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired, RuntimeError):
             atomic_bytes(args.target, old)
             try:
                 run("birdc", "configure")
-            except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
-                pass
+                previous_count = validate_candidate(args.backup)
+                wait_for_routes(previous_count)
+            except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired, RuntimeError, ValueError) as rollback_error:
+                raise RuntimeError(f"Apply failed and rollback could not be verified: {rollback_error}")
             raise
+        if args.promote_current:
+            atomic_bytes(args.candidate.parent / "current.txt", expected_text.encode())
         print(f"Applied {count} prefixes; rollback copy: {args.backup}")
 
 
