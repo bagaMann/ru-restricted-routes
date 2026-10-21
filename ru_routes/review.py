@@ -38,6 +38,20 @@ def review(current_text, candidate_text, live_count, exported_count,
     return result
 
 
+def validate_publication(state, candidate_text):
+    """Reject partial or mixed generations before querying live BIRD."""
+    manifest = json.loads((state / "candidate.json").read_text(encoding="utf-8"))
+    rendered_text = candidate_prefix_text(state / "candidate.bird.conf")
+    if manifest.get("status") != "candidate_not_applied":
+        raise ValueError("unexpected candidate manifest status")
+    if manifest.get("candidate_sha256") != hashlib.sha256(candidate_text.encode("utf-8")).hexdigest():
+        raise ValueError("candidate manifest text digest mismatch; re-fetch required")
+    if manifest.get("bird_sha256") != hashlib.sha256((state / "candidate.bird.conf").read_bytes()).hexdigest():
+        raise ValueError("candidate manifest BIRD digest mismatch; re-fetch required")
+    if manifest.get("prefix_count") != len(parse_prefixes(candidate_text)):
+        raise ValueError("candidate manifest prefix count mismatch")
+    return rendered_text
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state-dir", type=Path, default=Path("/var/lib/ru-restricted-routes"))
@@ -52,16 +66,7 @@ def main():
         state = args.state_dir
         current_text = (state / "current.txt").read_text(encoding="utf-8")
         candidate_text = (state / "candidate.txt").read_text(encoding="utf-8")
-        manifest = json.loads((state / "candidate.json").read_text(encoding="utf-8"))
-        rendered_text = candidate_prefix_text(state / "candidate.bird.conf")
-        if manifest.get("status") != "candidate_not_applied":
-            raise ValueError("unexpected candidate manifest status")
-        if manifest.get("candidate_sha256") != hashlib.sha256(candidate_text.encode("utf-8")).hexdigest():
-            raise ValueError("candidate manifest text digest mismatch; re-fetch required")
-        if manifest.get("bird_sha256") != hashlib.sha256((state / "candidate.bird.conf").read_bytes()).hexdigest():
-            raise ValueError("candidate manifest BIRD digest mismatch; re-fetch required")
-        if manifest.get("prefix_count") != len(parse_prefixes(candidate_text)):
-            raise ValueError("candidate manifest prefix count mismatch")
+        rendered_text = validate_publication(state, candidate_text)
         if candidate_text != rendered_text:
             raise ValueError("candidate.txt and candidate.bird.conf differ")
         live, exported = read_bird_state()
