@@ -85,6 +85,8 @@ def publish_candidate(args, prefixes, payload):
         "prefix_count": len(prefixes),
         "previous_count": len(old),
         "status": "candidate_not_applied",
+        "candidate_sha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+        "bird_sha256": hashlib.sha256(render_bird(prefixes).encode("utf-8")).hexdigest(),
     }
     atomic_write(args.state_dir / "candidate.json", json.dumps(manifest, indent=2) + "\n")
     print(json.dumps(manifest, indent=2))
