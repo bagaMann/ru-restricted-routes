@@ -5,6 +5,7 @@ an administrator must separately verify the live daemon before clearing journal.
 """
 import argparse
 import fcntl
+import json
 from pathlib import Path
 
 from ru_routes import transaction
@@ -39,14 +40,9 @@ def restore_file(journal, confirm=False):
         raise ValueError("verified transaction requires manual review, not automatic restoration")
     if actual == entry["new_sha256"]:
         transaction.durable_write(Path(entry["target"]), Path(entry["backup"]).read_bytes())
-    transaction.record(journal, "recovery_required", entry["target"],
-                       Path(entry["backup"]).read_bytes(),
-                       bytes.fromhex(entry["new_sha256"]) if False else b"", entry["backup"])
-    # Preserve original new digest: journal records the original transaction.
-    data = transaction.load(journal)
-    data["new_sha256"] = entry["new_sha256"]
-    import json
-    transaction.durable_write(journal, (json.dumps(data, indent=2, sort_keys=True) + "\n").encode())
+    data = dict(entry)
+    data["state"] = "recovery_required"
+    transaction.durable_write(journal, (json.dumps(data, indent=2, sort_keys=True) + "\\n").encode())
     return "Backup file restored; journal retained. Verify BIRD manually before clearing."
 
 
