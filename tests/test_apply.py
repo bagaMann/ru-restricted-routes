@@ -3,7 +3,7 @@ from unittest.mock import patch
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from ru_routes.apply import atomic_bytes, validate_candidate, wait_for_routes
+from ru_routes.apply import atomic_bytes, validate_candidate, candidate_prefix_text, wait_for_routes
 from ru_routes.generate import parse_prefixes, render_bird
 
 
@@ -31,6 +31,15 @@ class ApplyTests(unittest.TestCase):
             with patch("ru_routes.apply.time.monotonic", side_effect=[0, 1]):
                 with self.assertRaises(RuntimeError):
                     wait_for_routes(3, timeout=0)
+
+    def test_candidate_prefix_text_multiple_networks(self):
+        with TemporaryDirectory() as directory:
+            file = Path(directory) / "routes.conf"
+            networks = parse_prefixes("8.8.8.0/24\n1.1.1.0/24\n9.9.9.0/24\n")
+            file.write_text(render_bird(networks))
+            expected = "".join(f"{network}\n" for network in networks)
+            self.assertEqual(candidate_prefix_text(file), expected)
+            self.assertEqual(len(candidate_prefix_text(file).splitlines()), 3)
 
     def test_atomic_write(self):
         with TemporaryDirectory() as directory:
