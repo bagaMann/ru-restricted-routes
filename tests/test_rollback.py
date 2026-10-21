@@ -58,7 +58,7 @@ class RollbackTests(unittest.TestCase):
     def test_export_mismatch_restores_original(self):
         with TemporaryDirectory() as folder:
             args, original, baseline = fixture(folder)
-            with patch("ru_routes.apply.read_bird_state", return_value=(2, 2)):
+            with patch("ru_routes.apply.read_bird_state", return_value=(5, 5)):
                 with patch("ru_routes.apply.run"):
                     with patch("ru_routes.apply.wait_for_routes", side_effect=[RuntimeError("export mismatch"), None]) as wait:
                         with self.assertRaisesRegex(RuntimeError, "export mismatch"):
@@ -70,7 +70,7 @@ class RollbackTests(unittest.TestCase):
     def test_rollback_verification_failure_is_reported(self):
         with TemporaryDirectory() as folder:
             args, original, baseline = fixture(folder)
-            with patch("ru_routes.apply.read_bird_state", return_value=(2, 2)):
+            with patch("ru_routes.apply.read_bird_state", return_value=(5, 5)):
                 with patch("ru_routes.apply.run"):
                     with patch("ru_routes.apply.wait_for_routes", side_effect=[
                         RuntimeError("export mismatch"), RuntimeError("rollback verification failed")
