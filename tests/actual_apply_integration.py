@@ -93,7 +93,7 @@ def main():
 
             # Force identity-verification failure after a second configure.
             # The actual isolated BIRD must roll back from 7 to 6 routes.
-            second = proposed + "12.12.12.0/24\\n"
+            second = proposed + "12.12.12.0/24\n"
             rendered = render_bird(parse_prefixes(second))
             args.candidate.write_text(rendered)
             (root / "candidate.txt").write_text(second)
@@ -109,9 +109,9 @@ def main():
                 if checks == 1:
                     raise ValueError("injected exact-prefix mismatch")
                 return verify(text)
-            with patch("ru_routes.apply.read_bird_state", side_effect=counts), \\
-                 patch("ru_routes.apply.wait_for_routes", side_effect=wait), \\
-                 patch("ru_routes.apply.run", side_effect=run), \\
+            with patch("ru_routes.apply.read_bird_state", side_effect=counts), \
+                 patch("ru_routes.apply.wait_for_routes", side_effect=wait), \
+                 patch("ru_routes.apply.run", side_effect=run), \
                  patch("ru_routes.verify_routes.read_and_verify", side_effect=fail_once):
                 try:
                     apply_locked(args)
