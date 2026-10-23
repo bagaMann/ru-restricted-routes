@@ -14,7 +14,7 @@ def sha(data):
 def verify_release(release_dir, role):
     if role not in ('primary', 'backup'):
         raise ValueError('unknown role')
-    release_dir, inbox = Path(release_dir), Path(inbox)
+    release_dir = Path(release_dir)
     release = json.loads((release_dir / 'release.json').read_text(encoding='utf-8'))
     if release.get('schema') != 1 or set(release.get('servers', {})) != {'primary', 'backup'}:
         raise ValueError('unsupported or incomplete release')
