@@ -1,0 +1,2 @@
+# One HTTPS IPv4 CIDR feed per line. Lines beginning with # are ignored.
+https://raw.githubusercontent.com/kyoresuas/ru-direct/release/ru-standard.ipv4.txt
