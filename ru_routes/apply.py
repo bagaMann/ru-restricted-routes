@@ -194,7 +194,7 @@ def apply_locked(args):
         wait_for_routes(count)
         from ru_routes.verify_routes import read_and_verify
         read_and_verify(expected_text)
-    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired, RuntimeError):
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired, RuntimeError, ValueError):
         atomic_bytes(args.target, old)
         try:
             run("birdc", "configure")
