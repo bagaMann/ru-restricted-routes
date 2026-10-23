@@ -1,0 +1,21 @@
+# TEST EXAMPLE ONLY. Change IPs and ASNs before using with a test CHR.
+servers:
+  primary:
+    local_ip: 192.168.11.13
+    local_as: 64002
+  backup:
+    local_ip: 192.168.11.14
+    local_as: 64002
+routers:
+  router_a:
+    neighbor: 192.168.11.1
+    remote_as: 64018
+    groups: [ru, manual]
+  router_b:
+    neighbor: 192.168.11.2
+    remote_as: 64018
+    groups: [meta]
+  router_all:
+    neighbor: 192.168.11.3
+    remote_as: 64018
+    groups: [all]
