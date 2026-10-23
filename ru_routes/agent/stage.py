@@ -11,7 +11,7 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def stage_release(release_dir, role, inbox):
+def verify_release(release_dir, role):
     if role not in ('primary', 'backup'):
         raise ValueError('unknown role')
     release_dir, inbox = Path(release_dir), Path(inbox)
@@ -25,6 +25,14 @@ def stage_release(release_dir, role, inbox):
     data = (release_dir / f'{role}.bird.conf').read_bytes()
     if sha(data) != release['servers'][role]['config_sha256']:
         raise ValueError('role configuration checksum mismatch')
+    return release_id
+
+
+def stage_release(release_dir, role, inbox):
+    release_id = verify_release(release_dir, role)
+    release_dir, inbox = Path(release_dir), Path(inbox)
+    data = (release_dir / f'{role}.bird.conf').read_bytes()
+    release = json.loads((release_dir / 'release.json').read_text(encoding='utf-8'))
     if inbox.resolve() == Path('/etc/bird') or Path('/etc/bird') in inbox.resolve().parents:
         raise ValueError('cannot stage inside live BIRD configuration')
     target = inbox / release_id
