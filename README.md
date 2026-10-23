@@ -98,3 +98,26 @@ filesystem durability on sudden power loss, sandboxing, BIRD syntax checks,
 atomic promotion, rollback or live BGP validation. SHA256 detects accidental
 changes but is not sender authentication. Do not use the prototype to deploy
 configurations on production servers.
+
+
+## Coordinated prepare (feature branch)
+
+After building a release, the independent manager can prepare both agent
+inboxes, **without activating BIRD or using SSH**:
+
+```bash
+python3 -m ru_routes.manager.prepare --release-dir /tmp/rr-release-001 \
+  --primary-inbox /tmp/rr-agent-primary \
+  --backup-inbox /tmp/rr-agent-backup
+```
+
+The coordinator pre-validates both role-specific bundles before any publication,
+rejects duplicates and mismatched destinations, and attempts to remove only the
+first freshly staged directory if preparing the second role fails. This is
+**best-effort cleanup rather than an atomic distributed transaction**. It does
+not handle a process crash or network failure during publication.
+
+This local-only protocol is preparation for authenticated SSH transport. It
+does **not** perform cryptographic sender authentication, install live configs,
+verify BIRD, alter BGP or perform failover. Keep production configuration
+unchanged.
