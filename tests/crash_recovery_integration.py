@@ -39,9 +39,12 @@ def main():
         new = render_bird(parse_prefixes(new_text)).encode()
         transaction.durable_write(target, old)
         config.write_text(
-            "router id 192.0.2.13;\\n"
-            "ipv4 table ru_restricted_table;\\n"
-            f'include "{target}";\\n', encoding="utf-8"
+            "\n".join((
+                "router id 192.0.2.13;",
+                "ipv4 table ru_restricted_table;",
+                f'include "{target}";',
+                "",
+            )), encoding="utf-8"
         )
         cmd(bird, "-p", "-c", str(config))
         daemon = subprocess.Popen([bird, "-f", "-c", str(config), "-s", str(socket),
