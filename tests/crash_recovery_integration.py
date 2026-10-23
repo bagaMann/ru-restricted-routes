@@ -19,7 +19,10 @@ from ru_routes.verify_routes import parse_listing
 
 
 def cmd(*args):
-    return subprocess.run(args, check=True, capture_output=True, text=True, timeout=15).stdout
+    result = subprocess.run(args, capture_output=True, text=True, timeout=15)
+    if result.returncode:
+        raise RuntimeError(f"Command {args!r} failed (rc={result.returncode}): {result.stderr or result.stdout}")
+    return result.stdout
 
 
 def main():
@@ -35,9 +38,11 @@ def main():
         old = render_bird(parse_prefixes(old_text)).encode()
         new = render_bird(parse_prefixes(new_text)).encode()
         transaction.durable_write(target, old)
-        config.write_text("router id 192.0.2.13;\nipv4 table ru_restricted_table;\n" +
-                          'protocol static ru_restricted_static { ipv4 { table ru_restricted_table; }; include "' +
-                          str(target) + '"; }\n')
+        config.write_text(
+            "router id 192.0.2.13;\\n"
+            "ipv4 table ru_restricted_table;\\n"
+            f'include "{target}";\\n', encoding="utf-8"
+        )
         cmd(bird, "-p", "-c", str(config))
         daemon = subprocess.Popen([bird, "-f", "-c", str(config), "-s", str(socket),
                                    "-P", str(pid)], stdout=subprocess.DEVNULL,
