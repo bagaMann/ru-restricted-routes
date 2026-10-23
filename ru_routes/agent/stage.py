@@ -41,3 +41,17 @@ def stage_release(release_dir, role, inbox):
         target.rmdir()
         raise
     return release_id
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--release-dir', type=Path, required=True)
+    parser.add_argument('--role', choices=('primary', 'backup'), required=True)
+    parser.add_argument('--inbox', type=Path, required=True)
+    a = parser.parse_args()
+    print('STAGED (not activated): ' + stage_release(a.release_dir, a.role, a.inbox))
+
+
+if __name__ == '__main__':
+    main()
