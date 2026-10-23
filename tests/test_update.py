@@ -24,22 +24,22 @@ class UpdateTests(unittest.TestCase):
     def test_sources_file(self):
         with TemporaryDirectory() as folder:
             path = Path(folder) / "sources.txt"
-            path.write_text("# comment\\nhttps://example.org/a\\n\\nhttps://example.org/b\\n")
+            path.write_text("# comment\nhttps://example.org/a\n\nhttps://example.org/b\n")
             self.assertEqual(read_sources(path), ["https://example.org/a", "https://example.org/b"])
-            path.write_text("https://example.org/a\\nhttps://example.org/a\\n")
+            path.write_text("https://example.org/a\nhttps://example.org/a\n")
             with self.assertRaises(ValueError):
                 read_sources(path)
-            path.write_text("http://example.org/a\\n")
+            path.write_text("http://example.org/a\n")
             with self.assertRaises(ValueError):
                 read_sources(path)
 
     def test_merge_and_fail_closed(self):
         from ru_routes.generate import parse_prefixes
-        payloads = [b"8.8.8.0/24\\n", b"8.8.8.0/24\\n9.9.9.0/24\\n"]
+        payloads = [b"8.8.8.0/24\n", b"8.8.8.0/24\n9.9.9.0/24\n"]
         with patch("ru_routes.update.urlopen") as mock:
             mock.side_effect = [BytesIO(p) for p in payloads]
             feeds = fetch_sources(["https://example.org/a", "https://example.org/b"])
-        self.assertEqual(len(parse_prefixes("\\n".join(p.decode() for _, p, _ in feeds))), 2)
+        self.assertEqual(len(parse_prefixes("\n".join(p.decode() for _, p, _ in feeds))), 2)
         with patch("ru_routes.update.urlopen", side_effect=OSError("source unavailable")):
             with self.assertRaises(OSError):
                 fetch_sources(["https://example.org/a"])
