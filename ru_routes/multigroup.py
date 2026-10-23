@@ -116,6 +116,9 @@ def render_role(role, config, groups):
 
 
 def stage(config_path, sources_dir, output_dir):
+    destination = output_dir.resolve()
+    if destination == Path('/etc/bird') or Path('/etc/bird') in destination.parents:
+        raise ValueError('staging into /etc/bird is forbidden')
     config = load_config(config_path)
     groups = discover_groups(sources_dir)
     generated = {}
