@@ -48,3 +48,16 @@ def build_release(stage_dir, release_dir):
         release_dir.rmdir()
         raise
     return release
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--stage-dir', type=Path, required=True)
+    parser.add_argument('--release-dir', type=Path, required=True)
+    a = parser.parse_args()
+    print(json.dumps(build_release(a.stage_dir, a.release_dir), indent=2))
+
+
+if __name__ == '__main__':
+    main()
