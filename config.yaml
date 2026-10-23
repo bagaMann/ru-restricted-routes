@@ -1,21 +1,19 @@
-# TEST EXAMPLE ONLY. Change IPs and ASNs before using with a test CHR.
+# SAFE EXAMPLE ONLY: documentation IP addresses, not production neighbors.
+# Each router can select specific groups or [all].
+# After adding sources/meta.txt or sources/google.txt, refer to it by stem.
 servers:
   primary:
-    local_ip: 192.168.11.13
+    local_ip: 192.0.2.13
     local_as: 64002
   backup:
-    local_ip: 192.168.11.14
+    local_ip: 192.0.2.14
     local_as: 64002
 routers:
-  router_a:
-    neighbor: 192.168.11.1
+  demo_ru:
+    neighbor: 192.0.2.1
     remote_as: 64018
     groups: [ru, manual]
-  router_b:
-    neighbor: 192.168.11.2
-    remote_as: 64018
-    groups: [meta]
-  router_all:
-    neighbor: 192.168.11.3
+  demo_all:
+    neighbor: 192.0.2.2
     remote_as: 64018
     groups: [all]
