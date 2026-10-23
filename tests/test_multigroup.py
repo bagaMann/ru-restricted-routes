@@ -46,6 +46,26 @@ class MultiGroupTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             p=Path(t)/'c.yaml'; p.write_text(CONFIG+'unexpected: true\n')
             with self.assertRaises(ValueError):load_config(p)
+    def test_reject_mixed_all_and_explicit(self):
+        with tempfile.TemporaryDirectory() as t:
+            p = Path(t)/'config.yaml'
+            p.write_text(CONFIG.replace('groups: [all]', 'groups: [all, ru]'))
+            with self.assertRaises(ValueError):
+                load_config(p)
+
+    def test_reject_staging_into_bird_directory(self):
+        with tempfile.TemporaryDirectory() as t:
+            root = Path(t)
+            with self.assertRaisesRegex(ValueError, '/etc/bird'):
+                stage(root/'config.yaml', root/'sources', Path('/etc/bird/example'))
+
+    def test_reject_empty_url_group(self):
+        with tempfile.TemporaryDirectory() as t:
+            root = Path(t)
+            (root/'meta.txt').write_text('# only a comment\\n')
+            with self.assertRaises(ValueError):
+                discover_groups(root)
+
     def test_dynamic_google_group(self):
         with tempfile.TemporaryDirectory() as t:
             root=Path(t); root.joinpath('google.txt').write_text('https://example.org/google\n')
