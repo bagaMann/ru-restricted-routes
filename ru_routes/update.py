@@ -89,6 +89,11 @@ def main():
     urls = [args.url] if args.url else read_sources(args.sources_file)
     if any(not url.startswith("https://") or any(c.isspace() for c in url) for url in urls):
         p.error("only valid HTTPS feeds are allowed")
+    if args.max_prefixes < 1 or args.min_prefixes < 1 or args.min_prefixes > args.max_prefixes:
+        p.error("invalid prefix limits")
+    feeds = fetch_sources(urls)
+    raw = "\n".join(payload.decode("utf-8-sig") for _, payload, _ in feeds)
+    prefixes = parse_prefixes(raw)
     if not args.min_prefixes <= len(prefixes) <= args.max_prefixes:
         raise ValueError(f"prefix count outside limits: {len(prefixes)}")
     lock_path = Path("/run/lock/ru-restricted-routes.lock")
@@ -119,41 +124,6 @@ def publish_candidate(args, prefixes, feeds):
     atomic_write(args.state_dir / "candidate.json", json.dumps(manifest, indent=2) + "\n")
     print(json.dumps(manifest, indent=2))
 
-
-if __name__ == "__main__":
-    main()    feeds = fetch_sources(urls)
-    raw = "\n".join(payload.decode("utf-8-sig") for _, payload, _ in feeds)
-    prefixes = parse_prefixes(raw)
-    if not args.min_prefixes <= len(prefixes) <= args.max_prefixes:
-        raise ValueError(f"prefix count outside limits: {len(prefixes)}")
-    lock_path = Path("/run/lock/ru-restricted-routes.lock")
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with lock_path.open("a+") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        publish_candidate(args, prefixes, payload)
-
-
-def publish_candidate(args, prefixes, payload):
-    """Publish all candidate files under the shared advisory lock."""
-    current = args.state_dir / "current.txt"
-    old = parse_prefixes(current.read_text(encoding="utf-8")) if current.exists() else []
-    if not args.approve_large_change:
-        check_update(old, prefixes)
-    # Both files are staged for inspection. No automatic BIRD include/reload.
-    canonical = "".join(f"{p}\n" for p in prefixes)
-    atomic_write(args.state_dir / "candidate.txt", canonical)
-    atomic_write(args.state_dir / "candidate.bird.conf", render_bird(prefixes))
-    manifest = {
-        "source": args.url,
-        "sha256": hashlib.sha256(payload).hexdigest(),
-        "prefix_count": len(prefixes),
-        "previous_count": len(old),
-        "status": "candidate_not_applied",
-        "candidate_sha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
-        "bird_sha256": hashlib.sha256(render_bird(prefixes).encode("utf-8")).hexdigest(),
-    }
-    atomic_write(args.state_dir / "candidate.json", json.dumps(manifest, indent=2) + "\n")
-    print(json.dumps(manifest, indent=2))
 
 
 if __name__ == "__main__":
