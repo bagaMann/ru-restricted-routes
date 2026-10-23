@@ -71,3 +71,30 @@ No automated promotion, rollback, BIRD convergence verification, server
 distribution, or MikroTik failover mechanism has been implemented for this
 new multi-group path. Those require isolated BIRD/BGP integration tests
 before any production use.
+
+
+## Independent Manager / Agent — prototype branch
+
+The immutable release prototype lives in `feature/independent-manager-agent`.
+The 64-test checkpoint remains at `checkpoint/multigroup-64-tests-20261023`.
+Nothing in this prototype modifies BIRD, sends SSH, or automatically activates routes.
+
+After generating a multi-group stage, build one consistent release for both roles:
+
+```bash
+python3 -m ru_routes.multigroup --output-dir /tmp/rr-stage
+python3 -m ru_routes.manager.release --stage-dir /tmp/rr-stage --release-dir /tmp/rr-release-001
+python3 -m ru_routes.agent.stage --release-dir /tmp/rr-release-001 --role primary --inbox /tmp/rr-primary-inbox
+python3 -m ru_routes.agent.stage --release-dir /tmp/rr-release-001 --role backup --inbox /tmp/rr-backup-inbox
+python3 -m unittest discover -s tests -v
+```
+
+The manager release includes role-specific config checksums, per-router prefix
+identities and a deterministic `release_id`; the agent stages a checked bundle
+in an immutable per-release directory. Duplicate publication is rejected.
+
+**Not implemented:** authenticated transport, signatures/trust anchors,
+filesystem durability on sudden power loss, sandboxing, BIRD syntax checks,
+atomic promotion, rollback or live BGP validation. SHA256 detects accidental
+changes but is not sender authentication. Do not use the prototype to deploy
+configurations on production servers.
