@@ -1,0 +1,2 @@
+# Manually entered public IPv4 hosts (/32) and CIDRs
+8.8.8.8
