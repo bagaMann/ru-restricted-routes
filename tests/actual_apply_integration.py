@@ -4,6 +4,8 @@ Only BIRD's BGP status/export is simulated: the test daemon has no BGP peer.
 No production control socket, BGP session, or configuration is accessed.
 """
 import os
+import hashlib
+import json
 from pathlib import Path
 import subprocess
 import tempfile
@@ -11,7 +13,7 @@ import time
 from unittest.mock import patch
 
 from ru_routes.apply import apply_locked
-from ru_routes.generate import parse_prefixes
+from ru_routes.generate import parse_prefixes, render_bird
 from ru_routes.verify_routes import parse_listing
 from tests.test_rollback import fixture
 
@@ -89,15 +91,39 @@ def main():
             assert not (root / "transaction.json").exists()
             print("OK: actual apply_locked updated isolated BIRD and finalized journal")
 
-            # Second transaction: force a mismatch in exact verification.
-            # The failure must roll back the real isolated BIRD and keep current.txt.
-            (root / "current.txt").write_text(proposed)
-            # Swap baseline/candidate to restore original 5 routes; small
-            # deletion is rejected by the review gate, so test an additional
-            # route instead.
-            raise_test = False
-            if raise_test:
-                raise AssertionError("unreachable")
+            # Force identity-verification failure after a second configure.
+            # The actual isolated BIRD must roll back from 7 to 6 routes.
+            second = proposed + "12.12.12.0/24\\n"
+            rendered = render_bird(parse_prefixes(second))
+            args.candidate.write_text(rendered)
+            (root / "candidate.txt").write_text(second)
+            (root / "candidate.json").write_text(json.dumps({
+                "status": "candidate_not_applied", "prefix_count": 7,
+                "candidate_sha256": hashlib.sha256(second.encode()).hexdigest(),
+                "bird_sha256": hashlib.sha256(rendered.encode()).hexdigest(),
+            }))
+            checks = 0
+            def fail_once(text):
+                nonlocal checks
+                checks += 1
+                if checks == 1:
+                    raise ValueError("injected exact-prefix mismatch")
+                return verify(text)
+            with patch("ru_routes.apply.read_bird_state", side_effect=counts), \\
+                 patch("ru_routes.apply.wait_for_routes", side_effect=wait), \\
+                 patch("ru_routes.apply.run", side_effect=run), \\
+                 patch("ru_routes.verify_routes.read_and_verify", side_effect=fail_once):
+                try:
+                    apply_locked(args)
+                except ValueError as exc:
+                    assert "injected exact-prefix mismatch" in str(exc)
+                else:
+                    raise AssertionError("apply did not reject injected mismatch")
+            verify(proposed)
+            assert args.target.read_bytes() == render_bird(parse_prefixes(proposed)).encode()
+            assert (root / "current.txt").read_text() == proposed
+            assert not (root / "transaction.json").exists()
+            print("OK: actual apply_locked rolled back isolated BIRD after identity mismatch")
         finally:
             daemon.terminate()
             try:
