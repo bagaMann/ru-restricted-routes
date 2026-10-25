@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tests.test_release_protocol import ReleaseTests
+from tests import test_release_protocol as release_fixtures
 from ru_routes.manager.release import build_release
 from ru_routes.manager.prepare import prepare_pair
 
@@ -11,7 +11,7 @@ from ru_routes.manager.prepare import prepare_pair
 class PreparePairTests(unittest.TestCase):
     def fixture(self, root):
         release = root / 'release'
-        build_release(ReleaseTests().fixture(root), release)
+        build_release(release_fixtures.ReleaseTests().fixture(root), release)
         return release
 
     def test_both_prepared_same_release(self):
