@@ -121,3 +121,24 @@ This local-only protocol is preparation for authenticated SSH transport. It
 does **not** perform cryptographic sender authentication, install live configs,
 verify BIRD, alter BGP or perform failover. Keep production configuration
 unchanged.
+
+
+### Verify both locally prepared agent bundles
+
+The manager can inspect the **already staged** release without trusting a status
+string from an agent or changing BIRD:
+
+```bash
+python3 -m ru_routes.manager.inspect \
+  --release-id YOUR_64_HEX_RELEASE_ID \
+  --primary-inbox /tmp/rr-agent-primary \
+  --backup-inbox /tmp/rr-agent-backup
+```
+
+This verifies each copied config's SHA256, manifest release identity and
+identical per-router route-set metadata across roles. Output
+`both_prepared_verified_not_active` means staged files are intact, **not**
+that BIRD has loaded them or that the BGP peers received them.
+
+Live SSH trust, process-crash-safe durable transactions and BIRD activation
+remain pending.
