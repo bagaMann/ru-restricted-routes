@@ -142,3 +142,32 @@ that BIRD has loaded them or that the BGP peers received them.
 
 Live SSH trust, process-crash-safe durable transactions and BIRD activation
 remain pending.
+
+
+### Experimental SSH release transfer — staging only
+
+`ru_routes.manager.ssh_transport` sends one checked, role-specific bundle over
+OpenSSH with `BatchMode=yes`, `StrictHostKeyChecking=yes` and a dedicated
+`known_hosts` path. `ru_routes.agent.remote` receives bounded JSON via stdin
+and reuses the local package integrity verification. It **does not activate or
+reload BIRD**.
+
+Both machines must have the same feature branch installed in a Python search
+path, and the destination inbox must be writable by an unprivileged account.
+Example for a test server only (set real test addresses and review SSH host
+key fingerprints independently before populating `known_hosts`):
+
+```bash
+python3 -m ru_routes.manager.ssh_transport \
+  --release-dir /tmp/rr-release-001 --role primary \
+  --host TEST_BIRD_PRIMARY --user routesync \
+  --remote-inbox /var/lib/routesync/inbox \
+  --known-hosts /home/manager/.ssh/route-agent-known_hosts
+```
+
+Repeat for role `backup` and its other host. Each successful transfer returns
+`prepared_not_activated` with the same `release_id`. This is **not yet**
+a distributed two-node transaction, nor an SSH installer. Forced-command
+restrictions, isolated agent service account, durable crash recovery,
+host-key enrollment, two-node reconciliation and activation/rollback must be
+implemented and tested before a production rollout.
