@@ -27,7 +27,7 @@ def make_transfer(release_dir, role):
     return release_id, json.dumps(message, separators=(',', ':')).encode('utf-8')
 
 
-def ship(release_dir, role, host, remote_inbox, known_hosts, user='routesync', ssh='ssh'):
+def ship(release_dir, role, host, remote_inbox, known_hosts, user='routesync', ssh='ssh', identity_file=None):
     if not IDENTITY.fullmatch(host) or not IDENTITY.fullmatch(user):
         raise ValueError('invalid SSH host or user')
     known_hosts = Path(known_hosts)
@@ -35,6 +35,8 @@ def ship(release_dir, role, host, remote_inbox, known_hosts, user='routesync', s
         raise FileNotFoundError(f'SSH pinned known_hosts is missing: {known_hosts}')
     if not Path(remote_inbox).is_absolute():
         raise ValueError('remote inbox must be an absolute path')
+    if identity_file is not None and not Path(identity_file).is_file():
+        raise FileNotFoundError(f'SSH identity file missing: {identity_file}')
     release_id, payload = make_transfer(release_dir, role)
     remote_command = ' '.join(shlex.quote(s) for s in
         ('python3', '-m', 'ru_routes.agent.remote', '--role', role,
@@ -42,6 +44,8 @@ def ship(release_dir, role, host, remote_inbox, known_hosts, user='routesync', s
     command = [ssh, '-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
                '-o', f'UserKnownHostsFile={known_hosts}', '-o', 'ConnectTimeout=10',
                '--', f'{user}@{host}', remote_command]
+    if identity_file is not None:
+        command[1:1] = ['-i', str(identity_file), '-o', 'IdentitiesOnly=yes']
     completed = subprocess.run(command, input=payload, capture_output=True, timeout=45)
     if completed.returncode:
         raise RuntimeError(f'agent {role} rejected transfer or SSH failed: '
@@ -63,9 +67,10 @@ def main():
     p.add_argument('--user', default='routesync')
     p.add_argument('--remote-inbox', type=Path, required=True)
     p.add_argument('--known-hosts', type=Path, required=True)
+    p.add_argument('--identity-file', type=Path, required=True)
     a = p.parse_args()
     print(json.dumps(ship(a.release_dir, a.role, a.host, a.remote_inbox,
-                          a.known_hosts, a.user), indent=2))
+                          a.known_hosts, a.user, identity_file=a.identity_file), indent=2))
 
 
 if __name__ == '__main__':
