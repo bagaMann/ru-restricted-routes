@@ -80,6 +80,23 @@ class SSHTransportTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, 'did not confirm'):
                     ship(release, 'primary', 'bird1', '/tmp/inbox', root / 'known_hosts')
 
+    def test_dedicated_ssh_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            release = self.fixture(root)
+            identity = root / 'routesync_ed25519'
+            identity.write_text('test private key placeholder')
+            response = {'role': 'primary', 'release_id': RID, 'status': 'prepared_not_activated'}
+            with patch('ru_routes.manager.ssh_transport.verify_release', return_value=RID), patch(
+                'ru_routes.manager.ssh_transport.subprocess.run',
+                return_value=Mock(returncode=0, stdout=json.dumps(response).encode(), stderr=b'')
+            ) as run:
+                ship(release, 'primary', 'bird1.example', '/var/lib/routesync/inbox',
+                     root / 'known_hosts', identity_file=identity)
+            command = run.call_args.args[0]
+            self.assertEqual(command[1:3], ['-i', str(identity)])
+            self.assertIn('IdentitiesOnly=yes', command)
+
     def test_reject_injection_and_unpinned_host(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
