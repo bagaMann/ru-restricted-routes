@@ -171,3 +171,38 @@ a distributed two-node transaction, nor an SSH installer. Forced-command
 restrictions, isolated agent service account, durable crash recovery,
 host-key enrollment, two-node reconciliation and activation/rollback must be
 implemented and tested before a production rollout.
+
+
+### SSH agent account hardening (test servers only)
+
+A separate `ru_routes.agent.forced` entrypoint keeps the agent role and
+destination directory fixed by the **server's** SSH key configuration.
+It ignores `SSH_ORIGINAL_COMMAND` and accepts only bounded release data
+on standard input. A client-supplied command or inbox path is not trusted.
+
+Use a dedicated unprivileged `routesync` account with no sudo or access
+to `/etc/bird`. Install this repository on each test agent, pin the
+manager's public SSH key in that account's `authorized_keys`, and
+**manually** restrict the key to a forced command. For example, on the
+*primary test agent* (replace `SSH_PUBLIC_KEY` with the manager's
+real public key; do not use a shared password or private key here):
+
+```text
+restrict,command="cd /opt/ru-restricted-routes && exec /usr/bin/python3 -m ru_routes.agent.forced --role primary --inbox /var/lib/routesync/inbox" SSH_PUBLIC_KEY
+```
+
+On the backup test agent, configure `--role backup`, with its own
+account, key authorization and inbox. Restrict permissions on the inbox
+so only that agent account can write it, and do not expose this account
+through password authentication. Independently verify SSH server host key
+fingerprints and populate the manager's dedicated `known_hosts` file
+before attempting any transfer.
+
+The manager's experimental SSH transport still sends a remote command
+for compatibility with test SSH servers; OpenSSH's **server-side**
+`authorized_keys` forced command overrides it. Never grant unrestricted
+shell access to the manager key. Test first on non-production hosts.
+
+**Limits:** This is staging only. It is not a privileged installer,
+distributed transaction, key-provisioning automation, route activation or
+proof that live BGP exports match the proposed release.
