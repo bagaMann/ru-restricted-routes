@@ -12,7 +12,7 @@ import re
 
 from ru_routes.manager.inspect import inspect
 
-STATIC = re.compile(r'protocol static st_([a-z][a-z0-9_]{0,31}) \\{\\s*ipv4 \\{ table rt_\\1; \\};(?P<routes>(?:\\s*route [0-9./]+ blackhole;)*)\\s*\\}', re.S)
+STATIC = re.compile(r'protocol static st_([a-z][a-z0-9_]{0,31}) \{\s*ipv4 \{ table rt_\1; \};(?P<routes>(?:\s*route [0-9./]+ blackhole;)*)\s*\}', re.S)
 ROUTE = re.compile(r'route ([0-9./]+) blackhole;')
 
 
@@ -32,7 +32,7 @@ def make_isolated(inbox, release_id, role, output):
             raise ValueError('duplicate static prefix')
         canonical = sorted((ipaddress.IPv4Network(n) for n in networks))
         canonical = list(ipaddress.collapse_addresses(canonical))
-        encoded = ''.join(f'{net}\\n' for net in canonical).encode()
+        encoded = ''.join(f'{net}\n' for net in canonical).encode()
         expected = routers[name]
         if (len(canonical) != expected['prefix_count'] or
                 hashlib.sha256(encoded).hexdigest() != expected['prefix_sha256']):
@@ -48,7 +48,7 @@ def make_isolated(inbox, release_id, role, output):
                       f'    ipv4 {{ table rt_{name}; }};'])
         lines.extend(f'    route {net} blackhole;' for net in networks)
         lines.append('}')
-    content = '\\n'.join(lines) + '\\n'
+    content = '\n'.join(lines) + '\n'
     output = Path(output)
     if output.is_symlink() or output.resolve() == Path('/etc/bird') or Path('/etc/bird') in output.resolve().parents:
         raise ValueError('cannot write into live BIRD config')
