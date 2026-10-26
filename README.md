@@ -520,3 +520,30 @@ manager's exact `txid` and matching roles/release IDs from both
 separate SSH servers. Failed/missing/ambiguous reports are errors,
 not a reason to resume an incomplete transaction automatically.
 This remains a **read-only verification**, not an activation protocol.
+
+ 
+### Unified readiness plan — still no activation
+
+`ru_routes.manager.deployment_plan` combines the read-only preflight
+query and the three-journal reconciliation. It fails closed if either
+remote agent cannot be authenticated, the current release/transaction
+identity differs, or a route digest disagrees. A successful result
+documents a **proposed** sequence: `backup` then `primary`.
+
+```bash
+cd /opt/ru-restricted-routes
+python3 -m ru_routes.manager.deployment_plan \
+  --release-dir /tmp/rr-release-001 \
+  --journal-dir /var/lib/ru-routes-manager-tx \
+  --primary-host 10.110.11.201 \
+  --backup-host 10.110.27.201 \
+  --identity-file /root/.ssh/ru_routes_status_ed25519 \
+  --known-hosts /root/.ssh/route-agent-known_hosts
+```
+
+Expected: `readiness_plan_only_not_authorized_not_active`.
+No network or BIRD changes are made beyond authenticated SSH **read**
+requests. Results are a snapshot, **not an authorization token** or
+proof of live BGP state. Before activation we still need separate
+isolated rollback snapshots, live export verification, agent-controlled
+activation permissions and recovery after interruption.
