@@ -578,3 +578,43 @@ On `bird-backup`, use `--role backup`. Expected status:
 `sandbox_apply_and_rollback_verified_not_active`, with
 `rollback_verified: true`, `production_bird_touched: false`.
 This **does not** change the agent or manager intent journal.
+
+ 
+### Persistent static-only recovery bundle (no system BIRD changes)
+
+`ru_routes.agent.recovery_bundle` builds and atomically publishes a
+write-once bundle for a **future separately managed static-only BIRD**
+instance. The bundle contains `target.bird.conf`, an empty-table
+`baseline.bird.conf` and `snapshot.json` with SHA256 checksums and
+the pre-existing agent `txid`. It first requires the matching
+`agent_prepared_not_active` local intent and checks the staged
+release again. `verify` detects missing/tampered files.
+This is **not a snapshot of the currently running system BIRD** and
+cannot restore that process; we must implement separate owned-process
+startup and crash recovery before permanent activation.
+
+After pulling and passing tests on each agent, run the following on
+`bird-primary`:
+
+```bash
+cd /opt/ru-restricted-routes-agent
+python3 -m ru_routes.agent.recovery_bundle \
+  --storage /var/lib/ru-routes-managed-recovery \
+  capture --inbox /var/lib/routesync/inbox \
+  --release-id 4afc7549adfd5025ba4069db797487996ef9974c8a1505387e83b241b7732f84 \
+  --role primary \
+  --txid tx-9aedb448667daced2d34dea9d9285f2c894d3b8ddc757bf3cc92e7ae6d5adbfe \
+  --agent-state-dir /var/lib/ru-routes-agent-tx
+
+python3 -m ru_routes.agent.recovery_bundle \
+  --storage /var/lib/ru-routes-managed-recovery \
+  verify --release-id 4afc7549adfd5025ba4069db797487996ef9974c8a1505387e83b241b7732f84 \
+  --role primary \
+  --txid tx-9aedb448667daced2d34dea9d9285f2c894d3b8ddc757bf3cc92e7ae6d5adbfe
+```
+
+Use `--role backup` on bird-backup. Both commands are local and
+write only to the new storage directory; they do **not** touch the
+agent intent journal or live BIRD. Running `capture` twice for
+the same txid and role intentionally fails rather than overwriting
+rollback evidence.
