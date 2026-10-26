@@ -206,3 +206,31 @@ shell access to the manager key. Test first on non-production hosts.
 **Limits:** This is staging only. It is not a privileged installer,
 distributed transaction, key-provisioning automation, route activation or
 proof that live BGP exports match the proposed release.
+
+
+### BGP-free isolated validation (new)
+
+The agent can now derive a **new**, static-only BIRD configuration from a
+previously verified release. It reconstructs route declarations from parsed
+IPv4 networks, checks each table's prefix count and SHA256 against the release
+manifest and **never copies BGP, device or kernel protocols** from the input.
+It refuses overwriting existing output files and writing under /etc/bird.
+
+Run as administrator on each **test** agent after pulling the current branch:
+
+```bash
+cd /opt/ru-restricted-routes-agent
+python3 -m ru_routes.agent.isolated \
+  --inbox /var/lib/routesync/inbox \
+  --release-id 4afc7549adfd5025ba4069db797487996ef9974c8a1505387e83b241b7732f84 \
+  --role primary \
+  --output /tmp/rr-primary-isolated.bird.conf
+bird -p -c /tmp/rr-primary-isolated.bird.conf
+```
+
+Change `--role backup` and output basename to `rr-backup-isolated.bird.conf`
+on the backup test agent. Review the generated files: there must be no
+`protocol bgp`, `neighbor`, `protocol kernel`, or `protocol device`.
+This stage **only generates a separate config**. Running a second BIRD daemon,
+examining its actual routing tables, crash recovery and activation/rollback
+will be developed and tested separately.
