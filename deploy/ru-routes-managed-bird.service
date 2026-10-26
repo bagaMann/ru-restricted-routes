@@ -1,0 +1,34 @@
+[Unit]
+Description=RU Routes independent static-only managed BIRD (baseline)
+Documentation=https://github.com/bagaMann/ru-restricted-routes
+After=network.target
+ConditionPathExists=/etc/ru-routes-managed.env
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile=/etc/ru-routes-managed.env
+RuntimeDirectory=ru-routes-managed-bird
+RuntimeDirectoryMode=0700
+ExecStart=/usr/bin/python3 -m ru_routes.agent.managed_bird --storage ${STORAGE} --txid ${TXID} --role ${ROLE} --release-id ${RELEASE_ID} --agent-state-dir ${AGENT_STATE_DIR} --runtime-dir /run/ru-routes-managed-bird
+WorkingDirectory=/opt/ru-restricted-routes-agent
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+KillMode=control-group
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run/ru-routes-managed-bird
+PrivateTmp=true
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+PrivateDevices=true
+
+[Install]
+WantedBy=multi-user.target
