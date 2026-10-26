@@ -618,3 +618,69 @@ write only to the new storage directory; they do **not** touch the
 agent intent journal or live BIRD. Running `capture` twice for
 the same txid and role intentionally fails rather than overwriting
 rollback evidence.
+
+ 
+### Dedicated managed BIRD baseline service (opt-in test, no BGP)
+
+`ru_routes.agent.managed_bird` checks the agent intent and the
+write-once static-only recovery bundle, then executes BIRD with the
+**EMPTY** baseline. The socket and PID file live in
+`/run/ru-routes-managed-bird`, separate from the system `bird.service`.
+A restart always loads the empty baseline; it does **not** replay a
+previously applied target or automatically enable advertisements.
+
+The optional unit `deploy/ru-routes-managed-bird.service` is **not
+installed or enabled by a git pull**. It denies ambient capabilities,
+restricts filesystem writes to its runtime directory and contains
+no BGP or kernel protocol. Do not install it on an existing production
+BIRD host without isolating and testing the environment.
+
+On each test agent after successful tests and recovery-bundle verification,
+first validate the startup spec **without starting any process**:
+
+```bash
+mkdir -p -m 0700 /run/ru-routes-managed-bird
+cd /opt/ru-restricted-routes-agent
+python3 -m ru_routes.agent.managed_bird \
+  --storage /var/lib/ru-routes-managed-recovery \
+  --txid tx-9aedb448667daced2d34dea9d9285f2c894d3b8ddc757bf3cc92e7ae6d5adbfe \
+  --release-id 4afc7549adfd5025ba4069db797487996ef9974c8a1505387e83b241b7732f84 \
+  --role primary \
+  --agent-state-dir /var/lib/ru-routes-agent-tx \
+  --runtime-dir /run/ru-routes-managed-bird \
+  --check-only
+```
+
+On bird-backup use `--role backup`. Expected status is
+`managed_baseline_startup_only` and config path ending in
+`baseline.bird.conf`; ensure the returned argv names only the separate
+`managed.ctl` socket.
+
+When ready for the **test service** on the chosen agent:
+
+```bash
+cat > /etc/ru-routes-managed.env <<'ENV'
+STORAGE=/var/lib/ru-routes-managed-recovery
+TXID=tx-9aedb448667daced2d34dea9d9285f2c894d3b8ddc757bf3cc92e7ae6d5adbfe
+RELEASE_ID=4afc7549adfd5025ba4069db797487996ef9974c8a1505387e83b241b7732f84
+ROLE=primary
+AGENT_STATE_DIR=/var/lib/ru-routes-agent-tx
+ENV
+chmod 600 /etc/ru-routes-managed.env
+install -m 0644 deploy/ru-routes-managed-bird.service \
+  /etc/systemd/system/ru-routes-managed-bird.service
+systemctl daemon-reload
+systemctl start ru-routes-managed-bird
+systemctl status --no-pager ru-routes-managed-bird
+birdc -r -s /run/ru-routes-managed-bird/managed.ctl show route table rt_demo_all
+```
+
+On backup use `ROLE=backup`. The output of `show route` should
+have the `Table rt_demo_all:` header **without routes**. Verify the
+normal system BIRD process has not been changed with
+`systemctl status bird` and its own socket as appropriate.
+
+Do **not** run `systemctl enable` yet. A failure may be inspected with
+`journalctl -u ru-routes-managed-bird -n 80 --no-pager`; stop this
+separate process with `systemctl stop ru-routes-managed-bird`.
+No programmatic target activation or crash-safe BGP rollback exists yet.
