@@ -684,3 +684,30 @@ Do **not** run `systemctl enable` yet. A failure may be inspected with
 `journalctl -u ru-routes-managed-bird -n 80 --no-pager`; stop this
 separate process with `systemctl stop ru-routes-managed-bird`.
 No programmatic target activation or crash-safe BGP rollback exists yet.
+
+ 
+### Audit running managed BIRD before any activation
+
+On **both** agents after the opt-in systemd service is started,
+`ru_routes.agent.managed_runtime` performs a read-only runtime check:
+it verifies the saved transaction/baseline bundle, reads the dedicated
+PID, checks the **exact** process argv from `/proc/PID/cmdline`,
+checks the Unix socket, and uses the dedicated socket to confirm
+every generated router table is empty. A system BIRD PID, a changed
+`-c` config path, another socket, or nonempty routes are rejected.
+
+```bash
+cd /opt/ru-restricted-routes-agent
+python3 -m ru_routes.agent.managed_runtime \
+  --storage /var/lib/ru-routes-managed-recovery \
+  --txid tx-9aedb448667daced2d34dea9d9285f2c894d3b8ddc757bf3cc92e7ae6d5adbfe \
+  --release-id 4afc7549adfd5025ba4069db797487996ef9974c8a1505387e83b241b7732f84 \
+  --role primary \
+  --agent-state-dir /var/lib/ru-routes-agent-tx
+```
+
+On bird-backup replace `--role primary` with `--role backup`.
+Expected: `managed_runtime_verified_empty_not_active` and zero
+routes for `demo_all` and `demo_ru`. This is a *prerequisite*
+for later state-machine-driven apply/rollback, not an activation
+or a guarantee against concurrent out-of-band administrator changes.
