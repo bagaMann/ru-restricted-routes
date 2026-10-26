@@ -19,9 +19,11 @@ from ru_routes.manager.transaction_journal import _safe_path, _canonical
 def publish(storage, txid, role, release_id, agent_state_dir, runtime_dir,
             transition_dir, report_dir):
     destination = _safe_path(report_dir)
-    destination.mkdir(parents=True, mode=0o750, exist_ok=True)
+    destination.mkdir(parents=True, mode=0o755, exist_ok=True)
     if destination.is_symlink():
         raise ValueError('symlink report directory')
+    if destination.stat().st_mode & 0o022:
+        raise ValueError('report directory writable by untrusted users')
     report = reconcile_runtime(storage, txid, role, release_id,
                                agent_state_dir, runtime_dir, transition_dir)
     checked_at = datetime.now(timezone.utc).isoformat()
@@ -48,7 +50,7 @@ def publish(storage, txid, role, release_id, agent_state_dir, runtime_dir,
             file.write((json.dumps(doc, indent=2, sort_keys=True) + '\n').encode())
             file.flush()
             os.fsync(file.fileno())
-        os.chmod(temp, 0o640)
+        os.chmod(temp, 0o644)
         os.replace(temp, target)
         fd = os.open(destination, os.O_DIRECTORY | os.O_RDONLY)
         try:
