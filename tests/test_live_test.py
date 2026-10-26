@@ -21,6 +21,16 @@ class LiveTestTests(unittest.TestCase):
         result = validate_tables(self.fixture(), lambda table: self.listing())
         self.assertEqual(result['demo']['prefix_count'], 1)
 
+    def test_birdc_restricted_banner(self):
+        listing = self.listing().replace('Table rt_demo:', 'Access restricted\\nTable rt_demo:')
+        result = validate_tables(self.fixture(), lambda table: listing)
+        self.assertEqual(result['demo']['prefix_count'], 1)
+
+    def test_unknown_banner_still_rejected(self):
+        listing = self.listing().replace('Table rt_demo:', 'Unrecognized status\\nTable rt_demo:')
+        with self.assertRaisesRegex(ValueError, 'unexpected birdc output'):
+            validate_tables(self.fixture(), lambda table: listing)
+
     def test_same_count_wrong_prefix_rejected(self):
         with self.assertRaisesRegex(ValueError, 'differs'):
             validate_tables(self.fixture(), lambda table: self.listing('9.9.9.0/24'))
