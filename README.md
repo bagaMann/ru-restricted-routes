@@ -234,3 +234,32 @@ on the backup test agent. Review the generated files: there must be no
 This stage **only generates a separate config**. Running a second BIRD daemon,
 examining its actual routing tables, crash recovery and activation/rollback
 will be developed and tested separately.
+
+ 
+### Short-lived isolated BIRD runtime test (test nodes only)
+
+After stage verification and BGP-free config generation pass, run the
+separate Python test runner. It generates a fresh static-only config in a
+temporary directory, validates syntax via `bird -p`, launches a *child*
+`bird -f` with its own `-s` control socket and `-P` PID file, then uses
+`birdc -r -s` to compare each actual table with the release's exact
+IPv4 prefix digest. The child is terminated on both success and failure.
+It does not call `birdc` against the system socket, nor touch
+`/etc/bird`.
+
+Primary test host:
+
+```bash
+cd /opt/ru-restricted-routes-agent
+python3 -m ru_routes.agent.live_test \
+  --inbox /var/lib/routesync/inbox \
+  --release-id 4afc7549adfd5025ba4069db797487996ef9974c8a1505387e83b241b7732f84 \
+  --role primary
+```
+
+Backup test host: run the same command with `--role backup`.
+
+Expected JSON status is `isolated_live_routes_verified` with exact route
+counts and SHA256 per table. This does **not** establish BGP export
+correctness or production readiness. Never run the *full received*
+`bird.conf` as an additional process, because it contains BGP peers.
