@@ -10,23 +10,33 @@ import re
 import sys
 
 from ru_routes.agent.receipt import inspect_receipt
+from ru_routes.agent.intent import status as intent_status
 
 _RELEASE = re.compile(r'^[0-9a-f]{64}$')
 MAX_REQUEST = 1024
 
 
-def respond(data, *, role, inbox, state_dir):
+def respond(data, *, role, inbox, state_dir, agent_state_dir=None):
     if role not in ('primary', 'backup'):
         raise ValueError('unknown fixed agent role')
     if len(data) > MAX_REQUEST:
         raise ValueError('status request too long')
     request = json.loads(data)
-    if not isinstance(request, dict) or set(request) != {'schema', 'release_id'}:
+    if not isinstance(request, dict) or set(request) not in (
+            {'schema', 'release_id'}, {'schema', 'release_id', 'query'}):
         raise ValueError('invalid status request fields')
     release_id = request['release_id']
     if request['schema'] != 1 or not isinstance(release_id, str) or not _RELEASE.fullmatch(release_id):
         raise ValueError('invalid status request identity')
-    return inspect_receipt(inbox, release_id, role, state_dir)
+    if request.get('query', 'receipt') == 'receipt':
+        return inspect_receipt(inbox, release_id, role, state_dir)
+    if request['query'] != 'intent' or not agent_state_dir:
+        raise ValueError('unsupported status query')
+    record = intent_status(agent_state_dir)
+    if (record.get('status') != 'agent_prepared_not_active' or
+            record.get('release_id') != release_id or record.get('role') != role):
+        raise ValueError('agent has no matching prepared intent')
+    return record
 
 
 def main():
@@ -34,10 +44,12 @@ def main():
     parser.add_argument('--role', choices=('primary', 'backup'), required=True)
     parser.add_argument('--inbox', required=True)
     parser.add_argument('--state-dir', required=True)
+    parser.add_argument('--agent-state-dir', default=None)
     args = parser.parse_args()
     try:
         result = respond(sys.stdin.buffer.read(MAX_REQUEST + 1), role=args.role,
-                         inbox=args.inbox, state_dir=args.state_dir)
+                         inbox=args.inbox, state_dir=args.state_dir,
+                         agent_state_dir=args.agent_state_dir)
     except (ValueError, OSError, TypeError, KeyError, json.JSONDecodeError) as exc:
         print(json.dumps({'status': 'rejected', 'error': str(exc)}), file=sys.stderr)
         raise SystemExit(1)
