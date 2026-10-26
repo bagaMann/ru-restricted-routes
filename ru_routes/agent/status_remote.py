@@ -12,13 +12,14 @@ import sys
 from ru_routes.agent.receipt import inspect_receipt
 from ru_routes.agent.intent import status as intent_status
 from ru_routes.agent.transition_journal import history as transition_history
+from ru_routes.agent.runtime_report import read_report
 
 _RELEASE = re.compile(r'^[0-9a-f]{64}$')
 MAX_REQUEST = 1024
 
 
 def respond(data, *, role, inbox, state_dir, agent_state_dir=None,
-            transition_dir=None):
+            transition_dir=None, runtime_report_dir=None):
     if role not in ('primary', 'backup'):
         raise ValueError('unknown fixed agent role')
     if len(data) > MAX_REQUEST:
@@ -32,6 +33,9 @@ def respond(data, *, role, inbox, state_dir, agent_state_dir=None,
         raise ValueError('invalid status request identity')
     if request.get('query', 'receipt') == 'receipt':
         return inspect_receipt(inbox, release_id, role, state_dir)
+    if request['query'] == 'runtime' and runtime_report_dir:
+        report = read_report(runtime_report_dir, release_id, role)
+        return report
     if request['query'] == 'transition' and transition_dir:
         report = transition_history(transition_dir)
         entries = report['entries']
@@ -62,12 +66,14 @@ def main():
     parser.add_argument('--state-dir', required=True)
     parser.add_argument('--agent-state-dir', default=None)
     parser.add_argument('--transition-dir', default=None)
+    parser.add_argument('--runtime-report-dir', default=None)
     args = parser.parse_args()
     try:
         result = respond(sys.stdin.buffer.read(MAX_REQUEST + 1), role=args.role,
                          inbox=args.inbox, state_dir=args.state_dir,
                          agent_state_dir=args.agent_state_dir,
-                         transition_dir=args.transition_dir)
+                         transition_dir=args.transition_dir,
+                         runtime_report_dir=args.runtime_report_dir)
     except (ValueError, OSError, TypeError, KeyError, json.JSONDecodeError) as exc:
         print(json.dumps({'status': 'rejected', 'error': str(exc)}), file=sys.stderr)
         raise SystemExit(1)
