@@ -344,3 +344,31 @@ state, or issue a two-host commit. The SHA256 journal checksum detects
 accidental changes but is not an authentication signature against a local
 privileged attacker. Keep the state directory administrator-owned.
 Do not confuse `intent_prepared_not_active` with BGP activation.
+
+ 
+### Manager receipt pair review (read-only, not authenticated)
+
+`ru_routes.manager.review_receipts` validates two **separately supplied**
+preflight JSON receipts against the two role-specific configuration hashes
+and route digests in an immutable release. It also requires exactly one
+matching pending manager journal transaction.
+
+Important: the command validates **receipt content only**. It does not
+fetch receipts from agents, attest which host produced each receipt,
+authenticate a remote server, advance a transaction or activate BIRD.
+Never use this status as sufficient authorization for an apply operation.
+Copy receipts separately using a trusted, host-authenticated channel and
+restrict write access to the copies before review.
+
+```bash
+cd /opt/ru-restricted-routes
+python3 -m ru_routes.manager.review_receipts \
+  --release-dir /tmp/rr-release-001 \
+  --journal-dir /var/lib/ru-routes-manager-tx \
+  --primary-receipt /root/rr-evidence/primary.json \
+  --backup-receipt /root/rr-evidence/backup.json
+```
+
+Expected status: `receipt_contents_match_not_authenticated_not_active`.
+Remote attestation/status via a separately restricted SSH capability, and
+recovery-aware activation, are required before any live BGP change.
