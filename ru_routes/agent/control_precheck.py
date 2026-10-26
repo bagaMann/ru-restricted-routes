@@ -30,7 +30,7 @@ def validate_request(raw):
         raise ValueError('invalid control request fields')
     if type(request['schema']) is not int or request['schema'] != 1:
         raise ValueError('unsupported control schema')
-    if request['operation'] not in OPERATIONS:
+    if not isinstance(request['operation'], str) or request['operation'] not in OPERATIONS:
         raise ValueError('unsupported read-only operation')
     if (not isinstance(request['txid'], str) or
             not TX.fullmatch(request['txid']) or
