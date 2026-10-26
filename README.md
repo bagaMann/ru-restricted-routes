@@ -547,3 +547,34 @@ requests. Results are a snapshot, **not an authorization token** or
 proof of live BGP state. Before activation we still need separate
 isolated rollback snapshots, live export verification, agent-controlled
 activation permissions and recovery after interruption.
+
+ 
+### Disposable BIRD configure-and-rollback exercise (test agents only)
+
+The next step exercises an actual BIRD 2 `configure` transaction **only
+inside a short-lived child BIRD** using an isolated control socket and
+PID file. It starts with **empty static tables**, reconfigures to the
+verified staged static routes, checks exact route SHA256 for each
+table, reconfigures back to the empty baseline, verifies the tables
+are empty and shuts down the child process.
+
+This is NOT a snapshot of `/etc/bird`, not a rollback of production
+BIRD, and not BGP activation. The test deliberately contains no
+`protocol bgp` or `protocol kernel`; the normal BIRD process is
+unaffected. The error path attempts rollback and always terminates
+the disposable child.
+
+On `bird-primary`:
+
+```bash
+cd /opt/ru-restricted-routes-agent
+python3 -m ru_routes.agent.sandbox_switch \
+  --inbox /var/lib/routesync/inbox \
+  --release-id 4afc7549adfd5025ba4069db797487996ef9974c8a1505387e83b241b7732f84 \
+  --role primary
+```
+
+On `bird-backup`, use `--role backup`. Expected status:
+`sandbox_apply_and_rollback_verified_not_active`, with
+`rollback_verified: true`, `production_bird_touched: false`.
+This **does not** change the agent or manager intent journal.
