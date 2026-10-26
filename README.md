@@ -805,3 +805,56 @@ even if the restarted process is empty. Its response indicates
 authorization for another apply. Runtime query failure yields
 `runtime_not_verified_manual_review`. This is not an automatic
 crash-recovery implementation: the agent remains fail-closed.
+
+ 
+### Cross-agent read-only transition journal reconciliation
+
+The status-only SSH endpoint optionally supports `query=transition`,
+which returns the validated *latest durable journal entry* for its
+fixed role and release ID. This does **not** interrogate live BIRD:
+the manager treats journal evidence separately from locally audited
+runtime state. Do **not** make the dedicated managed BIRD Unix socket
+readable to the `routesync` SSH account.
+
+On both agents, after updating, give the SSH status account **read
+access only** to the transition journal:
+
+```bash
+setfacl -m u:routesync:rx /var/lib/ru-routes-managed-transitions
+setfacl -m u:routesync:r /var/lib/ru-routes-managed-transitions/transitions.json
+```
+
+Append the following argument to the EXISTING status-only forced SSH
+command in `/var/lib/routesync/.ssh/authorized_keys`:
+
+```text
+--transition-dir /var/lib/ru-routes-managed-transitions
+```
+
+Keep `restrict`, `from="192.168.11.13"`, the existing status public
+key, role and all other forced-command arguments unchanged. The upload
+key's forced command stays unchanged.
+
+On manager:
+
+```bash
+cd /opt/ru-restricted-routes
+python3 -m ru_routes.manager.check_transitions \
+  --release-dir /tmp/rr-release-001 \
+  --journal-dir /var/lib/ru-routes-manager-tx \
+  --primary-host 10.110.11.201 \
+  --backup-host 10.110.27.201 \
+  --identity-file /root/.ssh/ru_routes_status_ed25519 \
+  --known-hosts /root/.ssh/route-agent-known_hosts
+```
+
+Expected: `both_transition_journals_restored_not_live_attested`,
+`live_runtime_checked: false`, `activation_authorized: false`.
+This specifically refuses a missing/incomplete or foreign-txid
+transition journal and uses pinned SSH authentication.
+
+For defense in depth, the managed local cycle now holds an exclusive
+nonblocking flock during the entire configure/verify/rollback sequence
+and rechecks process identity directly before the first configure.
+Existing finished journal files are **not** reset; they continue to
+block another cycle.
