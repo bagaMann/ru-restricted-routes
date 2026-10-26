@@ -22,6 +22,18 @@ class AgentIntentTests(unittest.TestCase):
             self.assertEqual(saved['status'], 'agent_prepared_not_active')
             self.assertIsNone(saved['closed_at_utc'])
 
+    def test_status_does_not_create_or_open_lock(self):
+        with tempfile.TemporaryDirectory() as d:
+            state = Path(d) / 'agent'
+            with patch('ru_routes.agent.intent.inspect_receipt', return_value=RECEIPT):
+                prepare('/tmp/inbox', RID, 'backup', '/tmp/receipts', state, TXID)
+            lock = state / '.agent.lock'
+            lock.unlink()
+            with patch('ru_routes.agent.intent.os.open',
+                       side_effect=AssertionError('read-only status attempted os.open')):
+                self.assertEqual(status(state)['txid'], TXID)
+            self.assertFalse(lock.exists())
+
     def test_second_prepare_blocked(self):
         with tempfile.TemporaryDirectory() as d:
             state = Path(d) / 'agent'
