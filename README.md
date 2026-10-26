@@ -293,3 +293,25 @@ to generate it twice intentionally raises `FileExistsError`.
 Use a distinct state directory on each host, owned by a trusted
 administrator. Crash-safe activation and multi-agent transaction
 recovery remain future steps.
+
+ 
+### Read-only preflight receipt inspection
+
+On each agent independently, compare its persisted preflight receipt against
+the **current staged release** before starting any future transaction:
+
+```bash
+cd /opt/ru-restricted-routes-agent
+python3 -m ru_routes.agent.receipt \
+  --inbox /var/lib/routesync/inbox \
+  --release-id 4afc7549adfd5025ba4069db797487996ef9974c8a1505387e83b241b7732f84 \
+  --role primary \
+  --state-dir /var/lib/ru-routes-preflight
+```
+
+Use `--role backup` on bird-backup. Expected status is
+`preflight_receipt_verified_not_active`. The command rejects mismatched
+release IDs, roles, configuration digests and route selection hashes.
+This is read-only and does **not** activate BIRD. Historical receipts alone
+are not sufficient authorization for activation, especially if files can
+be changed by a privileged local actor.
