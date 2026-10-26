@@ -711,3 +711,53 @@ Expected: `managed_runtime_verified_empty_not_active` and zero
 routes for `demo_all` and `demo_ru`. This is a *prerequisite*
 for later state-machine-driven apply/rollback, not an activation
 or a guarantee against concurrent out-of-band administrator changes.
+
+ 
+### Local managed BIRD test cycle with durable journal (BACKUP FIRST)
+
+`ru_routes.agent.transition_journal` records checksummed,
+fsynced write-ahead transitions. `managed_cycle` then applies
+**only** `target.bird.conf` to the independently owned managed
+BIRD socket, checks exact live prefixes, and restores the **empty
+baseline**. It deliberately contains no BGP or kernel protocols.
+It refuses a second cycle when a transition journal already exists.
+A crash or failed rollback leaves an unresolved state requiring
+operator inspection, not an automatic success claim.
+
+**Prerequisites:** systemd managed BIRD service is active on
+`bird-backup`; the `managed_runtime` audit returned zero routes.
+This is an explicit local root-only test. **Do not use this command
+on production BIRD or on the primary agent before the backup passes.**
+
+On **bird-backup only**, after fetching the latest code and passing
+the unit tests, run:
+
+```bash
+cd /opt/ru-restricted-routes-agent
+python3 -m ru_routes.agent.managed_cycle \
+  --storage /var/lib/ru-routes-managed-recovery \
+  --txid tx-9aedb448667daced2d34dea9d9285f2c894d3b8ddc757bf3cc92e7ae6d5adbfe \
+  --release-id 4afc7549adfd5025ba4069db797487996ef9974c8a1505387e83b241b7732f84 \
+  --role backup \
+  --agent-state-dir /var/lib/ru-routes-agent-tx \
+  --runtime-dir /run/ru-routes-managed-bird \
+  --journal-dir /var/lib/ru-routes-managed-transitions \
+  --confirm-test-cycle
+
+python3 -m ru_routes.agent.transition_journal \
+  --state-dir /var/lib/ru-routes-managed-transitions status
+```
+
+Expected first result: `managed_cycle_applied_verified_rolled_back`,
+`rollback_verified: true`, `active: false`. The journal's
+final state should be `baseline_restored`, and both route tables
+should again be empty. **Do not delete or reset the transition
+journal** just to rerun; it is crash-recovery evidence.
+
+Important remaining limitations: this verifies only local
+static routes, not BGP advertising. No automatic runtime recovery
+or remote manager activation is implemented. A process crash after
+a write-ahead entry may leave the journal unresolved; restart
+of the managed BIRD service deliberately loads baseline, but the
+journal still requires manual reconciliation. External out-of-band
+changes to the service are not supported.
