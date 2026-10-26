@@ -11,12 +11,14 @@ import sys
 
 from ru_routes.agent.receipt import inspect_receipt
 from ru_routes.agent.intent import status as intent_status
+from ru_routes.agent.transition_journal import history as transition_history
 
 _RELEASE = re.compile(r'^[0-9a-f]{64}$')
 MAX_REQUEST = 1024
 
 
-def respond(data, *, role, inbox, state_dir, agent_state_dir=None):
+def respond(data, *, role, inbox, state_dir, agent_state_dir=None,
+            transition_dir=None):
     if role not in ('primary', 'backup'):
         raise ValueError('unknown fixed agent role')
     if len(data) > MAX_REQUEST:
@@ -30,6 +32,20 @@ def respond(data, *, role, inbox, state_dir, agent_state_dir=None):
         raise ValueError('invalid status request identity')
     if request.get('query', 'receipt') == 'receipt':
         return inspect_receipt(inbox, release_id, role, state_dir)
+    if request['query'] == 'transition' and transition_dir:
+        report = transition_history(transition_dir)
+        entries = report['entries']
+        if (not entries or entries[-1]['release_id'] != release_id or
+                entries[-1]['role'] != role):
+            raise ValueError('no matching transition journal')
+        # Return only the validated latest identity/state, not an unbounded log.
+        return {'status': report['status'], 'release_id': release_id,
+                'role': role, 'txid': entries[-1]['txid'],
+                'recorded_pid': entries[-1]['pid'],
+                'baseline_sha256': entries[-1]['baseline_sha256'],
+                'target_sha256': entries[-1]['target_sha256'],
+                'recorded_at_utc': entries[-1]['recorded_at_utc'],
+                'source': 'durable_transition_journal_not_live_runtime'}
     if request['query'] != 'intent' or not agent_state_dir:
         raise ValueError('unsupported status query')
     record = intent_status(agent_state_dir)
@@ -45,11 +61,13 @@ def main():
     parser.add_argument('--inbox', required=True)
     parser.add_argument('--state-dir', required=True)
     parser.add_argument('--agent-state-dir', default=None)
+    parser.add_argument('--transition-dir', default=None)
     args = parser.parse_args()
     try:
         result = respond(sys.stdin.buffer.read(MAX_REQUEST + 1), role=args.role,
                          inbox=args.inbox, state_dir=args.state_dir,
-                         agent_state_dir=args.agent_state_dir)
+                         agent_state_dir=args.agent_state_dir,
+                         transition_dir=args.transition_dir)
     except (ValueError, OSError, TypeError, KeyError, json.JSONDecodeError) as exc:
         print(json.dumps({'status': 'rejected', 'error': str(exc)}), file=sys.stderr)
         raise SystemExit(1)
