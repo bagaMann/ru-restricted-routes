@@ -923,3 +923,35 @@ Expected:
 Errors, stale snapshots, wrong txid/role/release, or nonempty routes
 fail closed. This does not establish a cryptographic chain of trust
 against a root-compromised agent, and does not make activation atomic.
+
+ 
+### Unified read-only activation gate (no write authority)
+
+`ru_routes.manager.activation_gate` re-runs all four pinned-SSH
+checks against the prepared transaction: remote preflight receipts,
+both agent intents, both durable transition journals, and recent
+root-generated live BIRD baseline reports. It cross-checks txid,
+release ID, role, restored journal state, and empty live baseline
+evidence. Any failed query, stale report, incorrect role or changed
+transaction fails closed.
+
+On manager (existing status-only key; **no SSH modifications**):
+
+```bash
+cd /opt/ru-restricted-routes
+python3 -m ru_routes.manager.activation_gate \
+  --release-dir /tmp/rr-release-001 \
+  --journal-dir /var/lib/ru-routes-manager-tx \
+  --primary-host 10.110.11.201 \
+  --backup-host 10.110.27.201 \
+  --identity-file /root/.ssh/ru_routes_status_ed25519 \
+  --known-hosts /root/.ssh/route-agent-known_hosts
+```
+
+Expected `static_only_activation_gate_passed_no_write_authority`,
+`recent_live_baselines_verified: true`, and
+`activation_authorized: false`. This is point-in-time readiness
+evidence, not a write token. The existing static test-cycle journals
+remain preserved and cannot be used for another activation.
+A separately authenticated, constrained, stateful write protocol
+must be developed and tested before any manager-driven changes.
