@@ -858,3 +858,68 @@ nonblocking flock during the entire configure/verify/rollback sequence
 and rechecks process identity directly before the first configure.
 Existing finished journal files are **not** reset; they continue to
 block another cycle.
+
+ 
+### Periodic privileged live BIRD audit, read through limited SSH
+
+Root on each agent audits the **dedicated managed process** and its empty
+tables, then atomically writes a root-owned read-only summary into
+`/var/lib/ru-routes-runtime-report/runtime-status.json`. The
+`routesync` status-only key reads that file; it never opens the BIRD
+control socket or executes `birdc`. Both endpoints reject evidence
+older than 120 seconds or dated more than 10 seconds in the future.
+A successful report is **historical observation, never permission**
+to enable BGP or write a configuration.
+
+Install after updating and passing tests on BOTH agents:
+
+```bash
+cd /opt/ru-restricted-routes-agent
+install -d -o root -g root -m 0755 /var/lib/ru-routes-runtime-report
+install -m 0644 deploy/ru-routes-runtime-report.service \
+  /etc/systemd/system/ru-routes-runtime-report.service
+install -m 0644 deploy/ru-routes-runtime-report.timer \
+  /etc/systemd/system/ru-routes-runtime-report.timer
+systemctl daemon-reload
+systemctl start ru-routes-runtime-report.service
+systemctl status --no-pager ru-routes-runtime-report.service
+runuser -u routesync -- cat \
+  /var/lib/ru-routes-runtime-report/runtime-status.json
+systemctl enable --now ru-routes-runtime-report.timer
+systemctl list-timers ru-routes-runtime-report.timer
+```
+
+The unit is a **separate root-owned read-only audit** and only writes
+its report file. It uses the existing environment file with
+`ROLE=primary` or `ROLE=backup`. The managed BIRD service itself
+remains independent. Do not change its socket permissions.
+
+Append this option to the EXISTING `ru-routes-status-manager` forced
+command in the agent's `authorized_keys`:
+
+```text
+--runtime-report-dir /var/lib/ru-routes-runtime-report
+```
+
+Retain all previous forced-command arguments, fixed role, `restrict`,
+`from="192.168.11.13"`, and SSH public key. No new key is needed.
+On manager:
+
+```bash
+cd /opt/ru-restricted-routes
+python3 -m ru_routes.manager.check_runtime \
+  --release-dir /tmp/rr-release-001 \
+  --journal-dir /var/lib/ru-routes-manager-tx \
+  --primary-host 10.110.11.201 \
+  --backup-host 10.110.27.201 \
+  --identity-file /root/.ssh/ru_routes_status_ed25519 \
+  --known-hosts /root/.ssh/route-agent-known_hosts
+```
+
+Expected:
+`both_recent_live_baselines_verified_not_authorized`,
+`live_runtime_checked: true`,
+`activation_authorized: false`.
+Errors, stale snapshots, wrong txid/role/release, or nonempty routes
+fail closed. This does not establish a cryptographic chain of trust
+against a root-compromised agent, and does not make activation atomic.
