@@ -315,3 +315,32 @@ release IDs, roles, configuration digests and route selection hashes.
 This is read-only and does **not** activate BIRD. Historical receipts alone
 are not sufficient authorization for activation, especially if files can
 be changed by a privileged local actor.
+
+ 
+### Manager transaction intent journal (no activation yet)
+
+New `ru_routes.manager.transaction_journal` introduces a single pending
+transaction intent, protected by a filesystem lock and checksummed atomic
+state publication with `fsync`. It verifies both role release bundles before
+recording the intent. It refuses a second pending transaction, malformed
+journal data or a journal path under `/etc/bird`.
+
+On **Route Manager** (192.168.11.13):
+
+```bash
+cd /opt/ru-restricted-routes
+python3 -m ru_routes.manager.transaction_journal \
+  --state-dir /var/lib/ru-routes-manager-tx \
+  init --release-dir /tmp/rr-release-001
+
+python3 -m ru_routes.manager.transaction_journal \
+  --state-dir /var/lib/ru-routes-manager-tx status
+```
+
+An explicit `abort --txid tx-...` closes a pending intent *without*
+touching either agent. **This journal is only a preparatory mechanism**:
+it has no ability to activate a route, command BIRD, verify remote current
+state, or issue a two-host commit. The SHA256 journal checksum detects
+accidental changes but is not an authentication signature against a local
+privileged attacker. Keep the state directory administrator-owned.
+Do not confuse `intent_prepared_not_active` with BGP activation.
