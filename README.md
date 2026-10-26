@@ -263,3 +263,33 @@ Expected JSON status is `isolated_live_routes_verified` with exact route
 counts and SHA256 per table. This does **not** establish BGP export
 correctness or production readiness. Never run the *full received*
 `bird.conf` as an additional process, because it contains BGP peers.
+
+ 
+### Verified preflight receipt (not active)
+
+After a successful isolated live-table test, the agent can persist a
+**write-once local preflight receipt**. This re-runs the static-only
+BIRD child test, compares each table's exact route digest with the
+staged release, checks the staged files again, then publishes a
+JSON receipt using a temporary file, fsync and a no-clobber hard link.
+The receipt status is `preflight_verified_not_activated`.
+It is **not** authority to activate BGP and is not a distributed commit.
+
+On `bird-primary`:
+
+```bash
+cd /opt/ru-restricted-routes-agent
+python3 -m ru_routes.agent.preflight \
+  --inbox /var/lib/routesync/inbox \
+  --release-id 4afc7549adfd5025ba4069db797487996ef9974c8a1505387e83b241b7732f84 \
+  --role primary \
+  --state-dir /var/lib/ru-routes-preflight
+```
+
+On `bird-backup`: repeat with `--role backup`. These commands
+do not configure system BIRD or touch `/etc/bird`.
+The receipt filename includes both release ID and role; attempting
+to generate it twice intentionally raises `FileExistsError`.
+Use a distinct state directory on each host, owned by a trusted
+administrator. Crash-safe activation and multi-agent transaction
+recovery remain future steps.
