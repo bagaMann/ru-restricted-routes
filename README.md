@@ -436,3 +436,38 @@ Note: the manager's report is only as fresh as the saved preflight
 receipts. It does not re-run BIRD or verify currently active BGP. Before
 activation, a new authenticated preflight/status protocol, a privileged
 least-authority service and crash-safe recovery must be implemented.
+
+ 
+### Agent-side durable prepare intent (no activation)
+
+The new `ru_routes.agent.intent` provides a local, administrator-only
+write-ahead record tied to a verified preflight receipt and the manager's
+transaction ID. The only states are `agent_prepared_not_active` and
+`agent_aborted_not_active`. Locking, checksums and fsynced atomic
+publication detect corruption and prevent a second local prepare.
+An interrupted transaction remains visible; it is **not** silently retried.
+The journal intentionally has no command for activating or reconfiguring BIRD.
+
+Use the existing manager transaction ID, unchanged, on each test node.
+On bird-primary:
+
+```bash
+cd /opt/ru-restricted-routes-agent
+python3 -m ru_routes.agent.intent --state-dir /var/lib/ru-routes-agent-tx \
+  prepare --inbox /var/lib/routesync/inbox \
+  --receipt-dir /var/lib/ru-routes-preflight \
+  --release-id 4afc7549adfd5025ba4069db797487996ef9974c8a1505387e83b241b7732f84 \
+  --role primary \
+  --txid tx-9aedb448667daced2d34dea9d9285f2c894d3b8ddc757bf3cc92e7ae6d5adbfe
+
+python3 -m ru_routes.agent.intent --state-dir /var/lib/ru-routes-agent-tx status
+```
+
+On bird-backup, use exactly the same commands with `--role backup`.
+These are **local administrator operations**, not commands available
+through either restricted SSH key. Do not attempt another prepare without
+explicitly inspecting and reconciling the existing agent state.
+The optional `abort --txid ...` records cancellation only when the
+intent is still prepared and not active.
+This is groundwork for an activation/rollback protocol, not a complete
+two-phase commit implementation.
