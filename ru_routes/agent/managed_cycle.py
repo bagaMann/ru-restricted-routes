@@ -6,6 +6,8 @@ BEFORE both config changes. On any error, attempts baseline restoration;
 a crash/interrupted journal requires manual reconciliation, never auto-retry.
 """
 import argparse
+import fcntl
+import os
 import json
 from pathlib import Path
 import subprocess
@@ -16,6 +18,7 @@ from ru_routes.agent.recovery_bundle import verify_bundle
 from ru_routes.agent.transition_journal import append, history
 from ru_routes.agent.live_test import validate_tables
 from ru_routes.agent.sandbox_switch import verify_empty_listing
+from ru_routes.manager.transaction_journal import _safe_path
 
 
 def _query(birdc, socket, *cmd):
@@ -44,8 +47,8 @@ def _configure(birdc, socket, config):
         raise RuntimeError(f'managed BIRD configure not acknowledged: {result[:300]}')
 
 
-def cycle(storage, txid, role, release_id, agent_state_dir, runtime_dir,
-          journal_dir, *, birdc='birdc'):
+def _cycle_locked(storage, txid, role, release_id, agent_state_dir, runtime_dir,
+                  journal_dir, *, birdc='birdc'):
     if history(journal_dir)['entries']:
         raise ValueError('transition journal already exists; do not re-run cycle')
     before = audit(storage, txid, role, release_id,
@@ -82,6 +85,9 @@ def cycle(storage, txid, role, release_id, agent_state_dir, runtime_dir,
                                       'show', 'route', 'table', table))
 
     record('baseline_verified')
+    if not audit_process_identity(storage, txid, role, release_id,
+                                  agent_state_dir, runtime_dir, pid):
+        raise RuntimeError('managed BIRD process changed before apply')
     record('apply_in_progress')
     rollback_recorded = False
     try:
@@ -120,6 +126,29 @@ def cycle(storage, txid, role, release_id, agent_state_dir, runtime_dir,
         except Exception:
             pass
         raise
+
+
+def cycle(storage, txid, role, release_id, agent_state_dir, runtime_dir,
+          journal_dir, *, birdc='birdc'):
+    """Serialize the WHOLE cycle, including audit, configure and rollback."""
+    folder = _safe_path(journal_dir)
+    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if folder.is_symlink():
+        raise ValueError('symlinked cycle journal directory')
+    path = folder / '.cycle.lock'
+    if path.is_symlink():
+        raise ValueError('symlinked cycle lock rejected')
+    fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise RuntimeError('another managed BIRD cycle is running') from exc
+        return _cycle_locked(storage, txid, role, release_id,
+                             agent_state_dir, runtime_dir, journal_dir,
+                             birdc=birdc)
+    finally:
+        os.close(fd)
 
 
 def audit_process_identity(storage, txid, role, release_id,
