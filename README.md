@@ -471,3 +471,52 @@ The optional `abort --txid ...` records cancellation only when the
 intent is still prepared and not active.
 This is groundwork for an activation/rollback protocol, not a complete
 two-phase commit implementation.
+
+ 
+### Read-only reconciliation of manager + primary + backup intent journals
+
+The status-only SSH forced command now optionally accepts an `intent`
+query. Enable it by adding `--agent-state-dir /var/lib/ru-routes-agent-tx`
+to the **existing status-only** forced-command SSH entry on each agent.
+Do not change the separate upload key's forced command. The new query
+only reads a checksummed agent state; it cannot advance states or
+activate/reload BIRD.
+
+On **each agent** as root (after pulling the new revision and confirming
+tests), allow `routesync` to read, but not write, the agent intent
+journal:
+
+```bash
+setfacl -m u:routesync:rx /var/lib/ru-routes-agent-tx
+setfacl -m u:routesync:r /var/lib/ru-routes-agent-tx/agent-state.json
+getfacl /var/lib/ru-routes-agent-tx /var/lib/ru-routes-agent-tx/agent-state.json
+```
+
+In `/var/lib/routesync/.ssh/authorized_keys`, modify **only** the
+existing `ru-routes-status-manager` key entry:
+- on primary, its forced command becomes
+  `cd /opt/ru-restricted-routes-agent && exec /usr/bin/python3 -m ru_routes.agent.status_remote --role primary --inbox /var/lib/routesync/inbox --state-dir /var/lib/ru-routes-preflight --agent-state-dir /var/lib/ru-routes-agent-tx`
+- on backup the same with `--role backup`.
+
+Preserve the `restrict,from="192.168.11.13",command="..."` authorized_keys
+options and the **existing** ed25519 status public key. Do not append
+a duplicate status key; edit its existing line.
+
+On Route Manager:
+
+```bash
+cd /opt/ru-restricted-routes
+python3 -m ru_routes.manager.reconcile_intents \
+  --release-dir /tmp/rr-release-001 \
+  --journal-dir /var/lib/ru-routes-manager-tx \
+  --primary-host 10.110.11.201 \
+  --backup-host 10.110.27.201 \
+  --identity-file /root/.ssh/ru_routes_status_ed25519 \
+  --known-hosts /root/.ssh/route-agent-known_hosts
+```
+
+Expected status: `all_three_intents_match_not_active`, including the
+manager's exact `txid` and matching roles/release IDs from both
+separate SSH servers. Failed/missing/ambiguous reports are errors,
+not a reason to resume an incomplete transaction automatically.
+This remains a **read-only verification**, not an activation protocol.
