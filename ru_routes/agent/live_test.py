@@ -20,7 +20,11 @@ def validate_tables(routers, query):
     result = {}
     for name, expected in sorted(routers.items()):
         output = query(f'rt_{name}')
-        actual = parse_listing(output, table=f'rt_{name}', source=f'st_{name}')
+        try:
+            actual = parse_listing(output, table=f'rt_{name}', source=f'st_{name}')
+        except ValueError as exc:
+            raise ValueError(f'{name}: unexpected birdc output: {exc}; '
+                             f'first 1200 bytes={output[:1200]!r}') from exc
         normalized = list(ipaddress.collapse_addresses(sorted(actual)))
         content = ''.join(f'{net}\n' for net in normalized).encode()
         count = len(normalized)
@@ -66,7 +70,8 @@ def run_isolated(inbox, release_id, role, *, bird='bird', birdc='birdc',
                                            capture_output=True, text=True, timeout=15)
                 if completed.returncode:
                     raise RuntimeError(f'isolated BIRD query failed for {table}: '
-                                       f'{completed.stderr[:200]}')
+                                       f'stdout={completed.stdout[:400]!r}; '
+                                       f'stderr={completed.stderr[:400]!r}')
                 return completed.stdout
 
             # Route initialization can briefly lag socket creation.
