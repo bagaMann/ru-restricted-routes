@@ -372,3 +372,67 @@ python3 -m ru_routes.manager.review_receipts \
 Expected status: `receipt_contents_match_not_authenticated_not_active`.
 Remote attestation/status via a separately restricted SSH capability, and
 recovery-aware activation, are required before any live BGP change.
+
+ 
+### Remote authenticated read-only status (test agents)
+
+A separate, **status-only SSH key** is required. Do not reuse the manager
+staging key: that key is forced to `ru_routes.agent.forced` for uploads.
+The new forced-command endpoint `ru_routes.agent.status_remote` accepts only
+a JSON object `{"schema":1,"release_id":"<64 hex>"}` on stdin and performs
+read-only inspection of the previously generated preflight receipt and
+staged release. The manager `ru_routes.manager.check_agents` queries
+two pinned SSH hosts with that identity, checks both replies against
+the still-pending local transaction and release route digests and prints
+`both_remote_preflights_verified_not_active`. This does NOT activate BIRD.
+
+On manager (192.168.11.13) create a dedicated SSH key:
+
+```bash
+test ! -e /root/.ssh/ru_routes_status_ed25519 &&
+ssh-keygen -t ed25519 -a 100 -N '' \
+  -f /root/.ssh/ru_routes_status_ed25519 \
+  -C ru-routes-status-manager
+cat /root/.ssh/ru_routes_status_ed25519.pub
+```
+
+On **each** agent after `git pull --ff-only` and successful tests,
+grant `routesync` narrowly scoped read and traverse permission for the
+preflight receipt directory (Debian: `apt install acl`; preserve root
+ownership). Do not grant write permission:
+
+```bash
+setfacl -m u:routesync:rx /var/lib/ru-routes-preflight
+setfacl -m u:routesync:r /var/lib/ru-routes-preflight/*.preflight.json
+```
+
+Append (DO NOT overwrite) a second entry to
+`/var/lib/routesync/.ssh/authorized_keys` with the new status
+public key and a fixed server-side command:
+
+- bird-primary, 10.110.11.201:
+  `restrict,from="192.168.11.13",command="cd /opt/ru-restricted-routes-agent && exec /usr/bin/python3 -m ru_routes.agent.status_remote --role primary --inbox /var/lib/routesync/inbox --state-dir /var/lib/ru-routes-preflight" ssh-ed25519 AAAA... ru-routes-status-manager`
+- bird-backup, 10.110.27.201:
+  `restrict,from="192.168.11.13",command="cd /opt/ru-restricted-routes-agent && exec /usr/bin/python3 -m ru_routes.agent.status_remote --role backup --inbox /var/lib/routesync/inbox --state-dir /var/lib/ru-routes-preflight" ssh-ed25519 AAAA... ru-routes-status-manager`
+
+The manager public key must be copied in full, replacing
+`ssh-ed25519 AAAA... ru-routes-status-manager` exactly.
+Keep file owner `routesync:routesync` and permissions `0600`.
+Validate the two independently confirmed SSH host fingerprints in the
+dedicated known_hosts before continuing.
+
+```bash
+cd /opt/ru-restricted-routes
+python3 -m ru_routes.manager.check_agents \
+  --release-dir /tmp/rr-release-001 \
+  --journal-dir /var/lib/ru-routes-manager-tx \
+  --primary-host 10.110.11.201 \
+  --backup-host 10.110.27.201 \
+  --identity-file /root/.ssh/ru_routes_status_ed25519 \
+  --known-hosts /root/.ssh/route-agent-known_hosts
+```
+
+Note: the manager's report is only as fresh as the saved preflight
+receipts. It does not re-run BIRD or verify currently active BGP. Before
+activation, a new authenticated preflight/status protocol, a privileged
+least-authority service and crash-safe recovery must be implemented.
