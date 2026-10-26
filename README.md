@@ -955,3 +955,41 @@ evidence, not a write token. The existing static test-cycle journals
 remain preserved and cannot be used for another activation.
 A separately authenticated, constrained, stateful write protocol
 must be developed and tested before any manager-driven changes.
+
+ 
+### Strict local agent control precheck (read-only, not SSH-enabled)
+
+The new `ru_routes.agent.control_precheck` accepts a bounded JSON
+request with **exactly** `schema`, `operation`, `txid`,
+`release_id`, and `role`. Only `operation=prepare_check` exists.
+Requests containing paths, shell commands, BIRD arguments, other
+operations or mismatched IDs are rejected. It verifies the locally
+prepared agent intent, checks the pinned recovery snapshot and audits
+the current independently managed BIRD baseline and completed cycle
+journal. No files are written, no `birdc configure` is issued, and
+the existing SSH status key is unchanged.
+
+On **bird-backup** after pulling and passing tests:
+
+```bash
+cd /opt/ru-restricted-routes-agent
+printf '%s\n' '{"schema":1,"operation":"prepare_check","txid":"tx-9aedb448667daced2d34dea9d9285f2c894d3b8ddc757bf3cc92e7ae6d5adbfe","release_id":"4afc7549adfd5025ba4069db797487996ef9974c8a1505387e83b241b7732f84","role":"backup"}' \
+  | python3 -m ru_routes.agent.control_precheck \
+    --storage /var/lib/ru-routes-managed-recovery \
+    --role backup \
+    --release-id 4afc7549adfd5025ba4069db797487996ef9974c8a1505387e83b241b7732f84 \
+    --agent-state-dir /var/lib/ru-routes-agent-tx \
+    --transition-dir /var/lib/ru-routes-managed-transitions
+```
+
+On **bird-primary** replace both occurrences of `backup` with
+`primary`. Expected
+`local_control_precheck_verified_not_authorized`,
+`activation_authorized: false`,
+`activation_performed: false`.
+
+This local module is a preliminary component for a future separate,
+fixed-command, authenticated control channel. **Do not attach it to
+`routesync` authorized_keys yet.** A write-capable endpoint requires
+its own identity, durable operation state machine, bounded rollback,
+and failure-injection tests.
