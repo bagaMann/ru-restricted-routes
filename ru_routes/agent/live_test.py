@@ -20,8 +20,12 @@ def validate_tables(routers, query):
     result = {}
     for name, expected in sorted(routers.items()):
         output = query(f'rt_{name}')
+        # birdc -r emits one additional status banner before the table header.
+        # Remove only that exact line; keep the shared route parser strict.
+        lines = output.splitlines(keepends=True)
+        cleaned = ''.join(line for line in lines if line.strip() != 'Access restricted')
         try:
-            actual = parse_listing(output, table=f'rt_{name}', source=f'st_{name}')
+            actual = parse_listing(cleaned, table=f'rt_{name}', source=f'st_{name}')
         except ValueError as exc:
             raise ValueError(f'{name}: unexpected birdc output: {exc}; '
                              f'first 1200 bytes={output[:1200]!r}') from exc
