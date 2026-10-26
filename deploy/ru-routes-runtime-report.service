@@ -1,0 +1,21 @@
+[Unit]
+Description=Publish read-only live verification report for managed BIRD
+After=ru-routes-managed-bird.service
+Requires=ru-routes-managed-bird.service
+ConditionPathExists=/etc/ru-routes-managed.env
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=/etc/ru-routes-managed.env
+WorkingDirectory=/opt/ru-restricted-routes-agent
+ExecStart=/usr/bin/python3 -m ru_routes.agent.runtime_report --storage ${STORAGE} --txid ${TXID} --role ${ROLE} --release-id ${RELEASE_ID} --agent-state-dir ${AGENT_STATE_DIR} --runtime-dir /run/ru-routes-managed-bird --transition-dir /var/lib/ru-routes-managed-transitions --report-dir /var/lib/ru-routes-runtime-report
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/ru-routes-runtime-report
+ProtectHome=true
+PrivateTmp=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX
