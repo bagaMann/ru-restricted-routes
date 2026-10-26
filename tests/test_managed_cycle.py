@@ -1,3 +1,5 @@
+import fcntl
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -64,6 +66,39 @@ class ManagedCycleTests(unittest.TestCase):
                     cycle(storage, TXID, 'backup', RID,
                           '/tmp/agent', '/tmp/runtime', journal)
                 audit.assert_not_called()
+
+    def test_concurrent_cycle_rejected_before_audit(self):
+        with tempfile.TemporaryDirectory() as d:
+            storage, journal = self.fixture(Path(d))
+            journal.mkdir()
+            fd = os.open(journal / '.cycle.lock', os.O_RDWR | os.O_CREAT, 0o600)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                with patch('ru_routes.agent.managed_cycle.audit') as audit:
+                    with self.assertRaisesRegex(RuntimeError, 'another managed BIRD cycle'):
+                        cycle(storage, TXID, 'backup', RID, '/tmp/agent',
+                              '/tmp/runtime', journal)
+                    audit.assert_not_called()
+            finally:
+                os.close(fd)
+
+    def test_pid_mismatch_before_apply_never_configures(self):
+        with tempfile.TemporaryDirectory() as d:
+            storage, journal = self.fixture(Path(d))
+            with patch('ru_routes.agent.managed_cycle.audit',
+                       return_value={'control_socket': '/run/managed.ctl',
+                                     'managed_pid': 7427}), \
+                 patch('ru_routes.agent.managed_cycle.verify_bundle',
+                       return_value=self.mocks()), \
+                 patch('ru_routes.agent.managed_cycle.audit_process_identity',
+                       return_value=False), \
+                 patch('ru_routes.agent.managed_cycle._configure') as configure:
+                with self.assertRaisesRegex(RuntimeError, 'changed before apply'):
+                    cycle(storage, TXID, 'backup', RID, '/tmp/agent',
+                          '/tmp/runtime', journal)
+                configure.assert_not_called()
+            from ru_routes.agent.transition_journal import history
+            self.assertEqual(history(journal)['status'], 'baseline_verified')
 
     def test_failed_target_attempts_rollback(self):
         with tempfile.TemporaryDirectory() as d:
