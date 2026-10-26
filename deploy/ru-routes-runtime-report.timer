@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh read-only managed BIRD runtime report
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=30s
+AccuracySec=5s
+Unit=ru-routes-runtime-report.service
+
+[Install]
+WantedBy=timers.target
