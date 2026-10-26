@@ -761,3 +761,47 @@ a write-ahead entry may leave the journal unresolved; restart
 of the managed BIRD service deliberately loads baseline, but the
 journal still requires manual reconciliation. External out-of-band
 changes to the service are not supported.
+
+ 
+### Read-only recovery audit after managed BIRD restart
+
+After both nodes complete the local test cycle with
+`baseline_restored`, use `ru_routes.agent.recover_runtime`.
+It checks the durable transition journal identity, saved recovery
+bundle checksums and *actual* currently running managed process and
+empty route tables. The old PID may differ following a restart.
+
+On **bird-backup first** (after pulling the revision and tests):
+
+```bash
+cd /opt/ru-restricted-routes-agent
+python3 -m ru_routes.agent.recover_runtime \
+  --storage /var/lib/ru-routes-managed-recovery \
+  --txid tx-9aedb448667daced2d34dea9d9285f2c894d3b8ddc757bf3cc92e7ae6d5adbfe \
+  --release-id 4afc7549adfd5025ba4069db797487996ef9974c8a1505387e83b241b7732f84 \
+  --role backup \
+  --agent-state-dir /var/lib/ru-routes-agent-tx \
+  --journal-dir /var/lib/ru-routes-managed-transitions
+
+systemctl restart ru-routes-managed-bird
+
+python3 -m ru_routes.agent.recover_runtime \
+  --storage /var/lib/ru-routes-managed-recovery \
+  --txid tx-9aedb448667daced2d34dea9d9285f2c894d3b8ddc757bf3cc92e7ae6d5adbfe \
+  --release-id 4afc7549adfd5025ba4069db797487996ef9974c8a1505387e83b241b7732f84 \
+  --role backup \
+  --agent-state-dir /var/lib/ru-routes-agent-tx \
+  --journal-dir /var/lib/ru-routes-managed-transitions
+```
+
+Before restart expect `baseline_verified_same_managed_bird_process`;
+after restart normally `baseline_verified_after_managed_bird_restart`.
+`baseline_empty_verified` and `reconciled` must be true.
+On primary use `--role primary`.
+
+If journal state is incomplete, the audit **does not** overwrite it
+even if the restarted process is empty. Its response indicates
+`incomplete_journal_runtime_empty_requires_review`, which is not
+authorization for another apply. Runtime query failure yields
+`runtime_not_verified_manual_review`. This is not an automatic
+crash-recovery implementation: the agent remains fail-closed.
