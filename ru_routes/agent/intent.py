@@ -82,12 +82,12 @@ def status(state_dir):
     state = _safe_path(state_dir)
     if not state.exists():
         return {'status': 'no_agent_intent'}
-    lock = _lock(state, False)
-    try:
-        record = _read(state)
-        return record if record else {'status': 'no_agent_intent'}
-    finally:
-        os.close(lock)
+    if state.is_symlink():
+        raise ValueError('symlink state directory rejected')
+    # The journal is published with atomic os.replace; readers never need
+    # a write-capable lock or filesystem changes.
+    record = _read(state)
+    return record if record else {'status': 'no_agent_intent'}
 
 
 def prepare(inbox, release_id, role, receipt_dir, state_dir, txid):
