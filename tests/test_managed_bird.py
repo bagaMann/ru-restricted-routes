@@ -77,7 +77,7 @@ class ManagedBirdTests(unittest.TestCase):
                 start('/tmp/storage', TXID, 'backup', RID,
                       '/tmp/agent', '/tmp/runtime')
             self.assertIn('-p', parse.call_args.args[0])
-            self.assertEqual(execvp.call_args.args[0][0], 'bird')
+            self.assertEqual(execvp.call_args.args[0], 'bird')
             self.assertTrue(execvp.call_args.args[0][1][-3].endswith('managed.ctl'))
 
     def test_syntax_failure_does_not_exec(self):
