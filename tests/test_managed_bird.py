@@ -78,7 +78,8 @@ class ManagedBirdTests(unittest.TestCase):
                       '/tmp/agent', '/tmp/runtime')
             self.assertIn('-p', parse.call_args.args[0])
             self.assertEqual(execvp.call_args.args[0], 'bird')
-            self.assertTrue(execvp.call_args.args[0][1][-3].endswith('managed.ctl'))
+            self.assertEqual(execvp.call_args.args[1], spec['argv'])
+            self.assertEqual(execvp.call_args.args[1][-3], spec['control_socket'])
 
     def test_syntax_failure_does_not_exec(self):
         with patch('ru_routes.agent.managed_bird.startup_spec',
