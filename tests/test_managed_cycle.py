@@ -135,7 +135,7 @@ class ManagedCycleTests(unittest.TestCase):
                  patch('ru_routes.agent.managed_cycle._configure',
                        side_effect=RuntimeError('socket down')), \
                  patch('ru_routes.agent.managed_cycle.audit_process_identity',
-                       return_value=False):
+                       side_effect=[True, False]):
                 with self.assertRaisesRegex(RuntimeError, 'socket down'):
                     cycle(storage, TXID, 'backup', RID, '/tmp/agent',
                           '/tmp/runtime', journal)
