@@ -1079,3 +1079,78 @@ Expected `both_control_preparations_match_not_authorized`,
 `activation_authorized: false`, `activation_performed: false`.
 The recorded managed PID is historical and does not substitute for
 `manager.check_runtime` at the time of any future operation.
+
+ 
+### Separate SSH control channel: probe-only bootstrap (no BIRD writes)
+
+The future privileged command channel now has its **own** unprivileged
+SSH principal and Ed25519 key. Its current forced command
+`ru_routes.agent.control_remote` accepts ONLY a fixed-size JSON
+`operation=probe` request with matching txid/release/role, and reads
+the existing write-once control receipt. There are **no** apply,
+rollback, shell, path or configure operations. The SSH identity has
+no sudo privileges and no access to the BIRD socket.
+
+On **manager**, create the distinct SSH key (only once; do not
+overwrite an existing key):
+
+```bash
+test ! -e /root/.ssh/ru_routes_control_ed25519 &&
+ssh-keygen -q -t ed25519 -N '' \
+  -f /root/.ssh/ru_routes_control_ed25519 \
+  -C ru-routes-control-manager
+cat /root/.ssh/ru_routes_control_ed25519.pub
+```
+
+On **each agent**, create a separate unprivileged account with a fixed
+SSH forced command:
+
+```bash
+id routectl >/dev/null 2>&1 || \
+  useradd --system --create-home --home-dir /var/lib/routectl \
+    --shell /bin/sh routectl
+install -d -o routectl -g routectl -m 0700 /var/lib/routectl/.ssh
+touch /var/lib/routectl/.ssh/authorized_keys
+chown routectl:routectl /var/lib/routectl/.ssh/authorized_keys
+chmod 0600 /var/lib/routectl/.ssh/authorized_keys
+
+# It may read ONLY the prepared receipt, not write any journals.
+setfacl -m u:routectl:rx /var/lib/ru-routes-agent-control
+setfacl -m u:routectl:r /var/lib/ru-routes-agent-control/control-state.json
+```
+
+Insert the **public key** from manager into a single authorized_keys
+record on each agent. Replace `PUBKEY_FROM_MANAGER` with the entire
+`ssh-ed25519 AAAA... comment` value returned above. On
+`bird-backup` use the following fixed command:
+
+```text
+restrict,from="192.168.11.13",command="cd /opt/ru-restricted-routes-agent && exec /usr/bin/python3 -m ru_routes.agent.control_remote --role backup --release-id 4afc7549adfd5025ba4069db797487996ef9974c8a1505387e83b241b7732f84 --state-dir /var/lib/ru-routes-agent-control" PUBKEY_FROM_MANAGER
+```
+
+On `bird-primary`, use exactly the same restrictions but
+`--role primary`. Check the forced-command line and SSH key
+permissions before testing; do not copy the private key to agents.
+Keep the old `routesync` status and transfer keys unchanged. This
+account must not belong to `sudo`, `bird` or a write-capable
+group; grant no `sudoers` entries.
+
+Then on **manager**:
+
+```bash
+cd /opt/ru-restricted-routes
+python3 -m ru_routes.manager.probe_control \
+  --release-dir /tmp/rr-release-001 \
+  --journal-dir /var/lib/ru-routes-manager-tx \
+  --primary-host 10.110.11.201 \
+  --backup-host 10.110.27.201 \
+  --identity-file /root/.ssh/ru_routes_control_ed25519 \
+  --known-hosts /root/.ssh/route-agent-known_hosts
+```
+
+Expected `both_separate_control_ssh_probes_verified_no_write`,
+`activation_authorized=false`, `activation_performed=false`.
+This is connectivity and request-validation evidence only. **No
+managed BIRD configuration is touched.** Next steps require an
+explicitly audited local privileged helper and durable execution state
+before even considering write-capable SSH operations.
