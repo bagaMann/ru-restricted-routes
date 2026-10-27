@@ -1154,3 +1154,36 @@ This is connectivity and request-validation evidence only. **No
 managed BIRD configuration is touched.** Next steps require an
 explicitly audited local privileged helper and durable execution state
 before even considering write-capable SSH operations.
+
+ 
+### Isolated future executor journal: crash/replay protection primitives
+
+`ru_routes.agent.execution_journal` defines a separate, root-owned,
+fsynced journal for a **future** privileged managed BIRD executor:
+`execution_prepared → apply_in_progress → target_verified →
+rollback_in_progress → baseline_restored`, with explicit terminal
+`manual_review_required`. Every transition is validated against
+the same txid, release ID, role, config digests and original PID.
+An interrupted `apply_in_progress`, `target_verified` or
+`rollback_in_progress` remains **unresolved**; it must not be
+automatically retried. After `baseline_restored`, no second
+`execution_prepared` is permitted in that journal.
+
+**No BIRD commands are implemented in this module.** No manager or SSH
+endpoint can call its write API; its only CLI action is `status`.
+Do **not** initialize this future execution journal on live agents
+yet. It is not the previously completed
+`ru-routes-managed-transitions` journal and does not change any
+existing intent, control preparation, BIRD configuration, or service.
+
+Test on all three nodes after pulling:
+
+```bash
+python3 -m compileall -q ru_routes tests &&
+python3 -m unittest discover -s tests -q
+```
+
+Expected 255 unit tests. A later privileged executor must implement
+config writes only after a separate security review and must integrate
+with this write-ahead state machine, process locks, independent rollback,
+and a strict manager-controlled transaction protocol.
