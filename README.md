@@ -993,3 +993,41 @@ fixed-command, authenticated control channel. **Do not attach it to
 `routesync` authorized_keys yet.** A write-capable endpoint requires
 its own identity, durable operation state machine, bounded rollback,
 and failure-injection tests.
+
+ 
+### New write-once control preparation journal (no BIRD changes)
+
+`ru_routes.agent.control_journal` adds a **separate**, durable
+local command-preparation receipt under
+`/var/lib/ru-routes-agent-control`. Its `prepare` operation
+first runs the existing privileged local `prepare_check` validation
+against live empty managed BIRD, the matching agent intent and recovery
+bundle. It records txid, release ID, role, both configuration digests,
+PID and UTC time using an fsynced, exclusive-create file. Replays,
+already-existing/corrupted journal files and failed prechecks block
+further preparations. A receipt is **never authorization to apply**.
+
+On **bird-backup first**, after git pull and tests:
+
+```bash
+cd /opt/ru-restricted-routes-agent
+printf '%s\n' '{"schema":1,"operation":"prepare_check","txid":"tx-9aedb448667daced2d34dea9d9285f2c894d3b8ddc757bf3cc92e7ae6d5adbfe","release_id":"4afc7549adfd5025ba4069db797487996ef9974c8a1505387e83b241b7732f84","role":"backup"}' \
+ | python3 -m ru_routes.agent.control_journal \
+   --state-dir /var/lib/ru-routes-agent-control prepare \
+   --storage /var/lib/ru-routes-managed-recovery \
+   --role backup \
+   --release-id 4afc7549adfd5025ba4069db797487996ef9974c8a1505387e83b241b7732f84 \
+   --agent-state-dir /var/lib/ru-routes-agent-tx \
+   --transition-dir /var/lib/ru-routes-managed-transitions
+python3 -m ru_routes.agent.control_journal \
+  --state-dir /var/lib/ru-routes-agent-control status
+```
+
+On **bird-primary**, replace both occurrences of `backup` with
+`primary`. Expected `control_prepared_not_authorized_not_active`
+with `activation_authorized: false` and
+`activation_performed: false`. The original
+`/var/lib/ru-routes-managed-transitions` journal must remain
+untouched. **Do not delete the new journal to rerun prepare**; it is
+intentionally one-shot evidence. Neither `authorized_keys` nor
+systemd configuration changes are necessary in this step.
