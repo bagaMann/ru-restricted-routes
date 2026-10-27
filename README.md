@@ -1031,3 +1031,51 @@ with `activation_authorized: false` and
 untouched. **Do not delete the new journal to rerun prepare**; it is
 intentionally one-shot evidence. Neither `authorized_keys` nor
 systemd configuration changes are necessary in this step.
+
+ 
+### Manager reads prepared control receipts (still strictly no activation)
+
+Both agents have already created their write-once
+`/var/lib/ru-routes-agent-control/control-state.json`. The existing
+status-only SSH endpoint now optionally supports `query=control` and
+validates the fixed release ID and fixed agent role before returning
+the stored receipt. It **cannot** prepare a new one or configure BIRD.
+The manager module `ru_routes.manager.check_control` cross-checks
+the two agents against the pending manager txid and verifies that
+both report `activation_authorized=false`.
+
+On each agent grant **read only** ACLs to the existing status account:
+
+```bash
+setfacl -m u:routesync:rx /var/lib/ru-routes-agent-control
+setfacl -m u:routesync:r /var/lib/ru-routes-agent-control/control-state.json
+runuser -u routesync -- cat /var/lib/ru-routes-agent-control/control-state.json >/dev/null
+```
+
+Keep the directory and file owned by root; never grant write access.
+Append to the existing forced-command `ru-routes-status-manager`
+entry in `/var/lib/routesync/.ssh/authorized_keys`:
+
+```text
+--control-state-dir /var/lib/ru-routes-agent-control
+```
+
+All existing role, SSH restrictions, public key and prior options
+must remain unchanged. **Do not modify the transfer key**.
+On manager:
+
+```bash
+cd /opt/ru-restricted-routes
+python3 -m ru_routes.manager.check_control \
+  --release-dir /tmp/rr-release-001 \
+  --journal-dir /var/lib/ru-routes-manager-tx \
+  --primary-host 10.110.11.201 \
+  --backup-host 10.110.27.201 \
+  --identity-file /root/.ssh/ru_routes_status_ed25519 \
+  --known-hosts /root/.ssh/route-agent-known_hosts
+```
+
+Expected `both_control_preparations_match_not_authorized`,
+`activation_authorized: false`, `activation_performed: false`.
+The recorded managed PID is historical and does not substitute for
+`manager.check_runtime` at the time of any future operation.
