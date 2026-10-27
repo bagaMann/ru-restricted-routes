@@ -49,7 +49,11 @@ class ControlJournalTests(unittest.TestCase):
             self.invoke(root)
             with patch('ru_routes.agent.control_journal.process') as verify:
                 with self.assertRaisesRegex(ValueError, 'no replay'):
-                    self.invoke(root)
+                    prepare(request(), state_dir=root,
+                            storage='/tmp/storage', role='backup',
+                            release_id=RID, agent_state_dir='/tmp/intent',
+                            runtime_dir='/tmp/runtime',
+                            transition_dir='/tmp/transitions')
                 verify.assert_not_called()
 
     def test_corruption_blocks_future_operation(self):
