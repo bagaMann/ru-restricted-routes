@@ -1187,3 +1187,39 @@ Expected 255 unit tests. A later privileged executor must implement
 config writes only after a separate security review and must integrate
 with this write-ahead state machine, process locks, independent rollback,
 and a strict manager-controlled transaction protocol.
+
+ 
+### Local static-only executor: apply -> verify -> rollback (stage B1)
+
+`ru_routes.agent.local_executor` is now a locally invoked root-only
+one-shot managed BIRD executor. It checks the existing one-shot control
+preparation, recovery bundle checksums, current managed BIRD PID/argv,
+empty baseline tables and the independent dedicated socket, before a
+new execution journal is created. It serializes against the historical
+`.cycle.lock`; writes durable `execution_prepared` and
+`apply_in_progress` states before configuring the target; verifies
+the *exact* expected prefix sets in both tables; then records
+`rollback_in_progress`, restores the original baseline, verifies both
+tables are empty, and records `baseline_restored`. If either
+configuration fails, it attempts rollback only against the same
+verified PID. No automatic retry after crashes or partial journal
+states. Old journals are never removed or rewritten.
+
+**Not an SSH endpoint.** `routectl` remains probe-only. This
+executor does not add BGP or kernel protocols, does not change
+`/etc/bird`, and does not affect `bird.service`.
+
+First update all nodes and verify **262 tests**:
+
+```bash
+git pull --ff-only
+python3 -m compileall -q ru_routes tests &&
+python3 -m unittest discover -s tests -q
+```
+
+Do not run the following one-shot operation until tests pass and we
+explicitly begin the isolated backup-agent integration test. That
+operation WILL temporarily load test routes into managed BIRD.
+The reserved separate path is
+`/var/lib/ru-routes-agent-execution`; no manual initialization and
+no manual clearing of this or other journals.
